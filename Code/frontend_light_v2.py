@@ -31,8 +31,8 @@ st.markdown("""
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body, .stApp {
-        background-color: #F7F3EE !important;
-        color: #1C1209 !important;
+        background-color: #F5F8FC !important;
+        color: #0D2347 !important;
         font-family: 'DM Sans', sans-serif !important;
     }
 
@@ -49,13 +49,13 @@ st.markdown("""
     /* ── Typography overrides ── */
     h1, h2, h3, h4, h5, h6 {
         font-family: 'Playfair Display', serif !important;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
         font-weight: 600 !important;
         letter-spacing: -0.02em !important;
     }
 
     p, span, div, label, li {
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
         font-family: 'DM Sans', sans-serif !important;
     }
 
@@ -70,7 +70,7 @@ st.markdown("""
 
     /* ── Hero Banner ── */
     .polar-hero {
-        background: linear-gradient(135deg, #1C1209 0%, #3D2B1F 50%, #5C3D2E 100%);
+        background: linear-gradient(135deg, #081A3A 0%, #0D2347 45%, #1B3A7A 100%);
         padding: 4rem 4rem 3rem 4rem;
         margin: -1rem -2rem 0 -2rem;
         position: relative;
@@ -83,7 +83,7 @@ st.markdown("""
         top: -60px; right: -60px;
         width: 320px; height: 320px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(196,160,120,0.15) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(74,159,212,0.15) 0%, transparent 70%);
         pointer-events: none;
     }
 
@@ -93,7 +93,7 @@ st.markdown("""
         bottom: -40px; left: 10%;
         width: 200px; height: 200px;
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(196,160,120,0.08) 0%, transparent 70%);
+        background: radial-gradient(circle, rgba(74,159,212,0.08) 0%, transparent 70%);
         pointer-events: none;
     }
 
@@ -103,7 +103,7 @@ st.markdown("""
         font-weight: 500;
         letter-spacing: 0.22em;
         text-transform: uppercase;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
         margin-bottom: 1rem;
         display: flex;
         align-items: center;
@@ -114,7 +114,7 @@ st.markdown("""
         content: '';
         display: inline-block;
         width: 36px; height: 1px;
-        background: #C4A078;
+        background: #4A9FD4;
         opacity: 0.6;
     }
 
@@ -122,7 +122,7 @@ st.markdown("""
         font-family: 'Playfair Display', serif !important;
         font-size: clamp(2.6rem, 5vw, 4rem) !important;
         font-weight: 700 !important;
-        color: #F7F3EE !important;
+        color: #F5F8FC !important;
         line-height: 1.08 !important;
         letter-spacing: -0.03em !important;
         margin-bottom: 0.5rem;
@@ -130,13 +130,13 @@ st.markdown("""
 
     .hero-title em {
         font-style: italic;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
     }
 
     .hero-subtitle {
         font-family: 'Cormorant Garamond', serif !important;
         font-size: 1.25rem !important;
-        color: rgba(247,243,238,0.65) !important;
+        color: rgba(245,248,252,0.65) !important;
         font-weight: 300 !important;
         margin-top: 1.25rem !important;
         max-width: 580px;
@@ -158,7 +158,7 @@ st.markdown("""
     .hero-stat-num {
         font-family: 'Playfair Display', serif;
         font-size: 1.5rem;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
         font-weight: 600;
         line-height: 1;
     }
@@ -167,13 +167,13 @@ st.markdown("""
         font-size: 0.65rem;
         letter-spacing: 0.15em;
         text-transform: uppercase;
-        color: rgba(247,243,238,0.45) !important;
+        color: rgba(245,248,252,0.45) !important;
         margin-top: 0.2rem;
     }
 
     .hero-divider {
         width: 1px; height: 40px;
-        background: rgba(196,160,120,0.25);
+        background: rgba(74,159,212,0.25);
     }
 
     /* ── Navigation Pills ── */
@@ -182,7 +182,7 @@ st.markdown("""
         gap: 0.5rem;
         padding: 1.25rem 0;
         margin-bottom: 0.5rem;
-        border-bottom: 1px solid rgba(28,18,9,0.1);
+        border-bottom: 1px solid rgba(13,35,71,0.1);
         margin-bottom: 2rem;
     }
 
@@ -194,17 +194,17 @@ st.markdown("""
         text-transform: uppercase;
         padding: 0.55rem 1.25rem;
         border-radius: 2px;
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
         background: transparent;
-        border: 1px solid rgba(28,18,9,0.15);
+        border: 1px solid rgba(13,35,71,0.15);
         cursor: pointer;
         transition: all 0.25s ease;
     }
 
     .polar-nav-pill:hover, .polar-nav-pill.active {
-        background: #1C1209;
-        color: #F7F3EE !important;
-        border-color: #1C1209;
+        background: #0D2347;
+        color: #F5F8FC !important;
+        border-color: #0D2347;
     }
 
     /* ── Section Labels ── */
@@ -214,7 +214,7 @@ st.markdown("""
         font-weight: 500;
         letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
         margin-bottom: 0.6rem;
         display: block;
     }
@@ -223,7 +223,7 @@ st.markdown("""
         font-family: 'Playfair Display', serif !important;
         font-size: 1.9rem !important;
         font-weight: 600 !important;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
         letter-spacing: -0.025em !important;
         margin-bottom: 1.75rem !important;
         line-height: 1.15 !important;
@@ -231,13 +231,13 @@ st.markdown("""
 
     .section-heading em {
         font-style: italic;
-        color: #5C3D2E !important;
+        color: #2E5FA0 !important;
     }
 
     /* ── Upload Zone ── */
     [data-testid="stFileUploaderDropzone"] {
-        background: #FFFDF9 !important;
-        border: 1.5px dashed rgba(92,61,46,0.3) !important;
+        background: #FFFFFF !important;
+        border: 1.5px dashed rgba(46,95,160,0.3) !important;
         border-radius: 4px !important;
         padding: 3rem 2rem !important;
         text-align: center !important;
@@ -251,13 +251,13 @@ st.markdown("""
     }
 
     [data-testid="stFileUploaderDropzone"]:hover {
-        border-color: #C4A078 !important;
-        background: #FDF8F2 !important;
-        box-shadow: 0 0 0 4px rgba(196,160,120,0.08) !important;
+        border-color: #4A9FD4 !important;
+        background: #EEF4FB !important;
+        box-shadow: 0 0 0 4px rgba(74,159,212,0.08) !important;
     }
 
     [data-testid="stFileUploaderDropzoneInstructions"] {
-        color: #5C3D2E !important;
+        color: #2E5FA0 !important;
         font-size: 0.9rem !important;
         font-weight: 400 !important;
         font-family: 'DM Sans', sans-serif !important;
@@ -268,7 +268,7 @@ st.markdown("""
         display: block;
         font-size: 2rem;
         margin-bottom: 0.75rem;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
         font-weight: 300;
     }
 
@@ -276,9 +276,9 @@ st.markdown("""
     .stButton > button,
     [data-testid="baseButton-primary"],
     [data-testid="baseButton-secondary"] {
-        background: #1C1209 !important;
-        color: #F7F3EE !important;
-        border: 1px solid #1C1209 !important;
+        background: #0D2347 !important;
+        color: #F5F8FC !important;
+        border: 1px solid #0D2347 !important;
         padding: 0.7rem 1.75rem !important;
         border-radius: 2px !important;
         font-family: 'DM Sans', sans-serif !important;
@@ -298,7 +298,7 @@ st.markdown("""
     .stButton > button div,
     [data-testid="baseButton-primary"] *,
     [data-testid="baseButton-secondary"] * {
-        color: #F7F3EE !important;
+        color: #F5F8FC !important;
     }
 
     .stButton > button:hover,
@@ -307,17 +307,17 @@ st.markdown("""
     [data-testid="baseButton-primary"]:hover *,
     [data-testid="baseButton-secondary"]:hover,
     [data-testid="baseButton-secondary"]:hover * {
-        background: #C4A078 !important;
-        border-color: #C4A078 !important;
-        color: #1C1209 !important;
+        background: #4A9FD4 !important;
+        border-color: #4A9FD4 !important;
+        color: #0D2347 !important;
         transform: translateY(-1px) !important;
-        box-shadow: 0 4px 16px rgba(196,160,120,0.3) !important;
+        box-shadow: 0 4px 16px rgba(74,159,212,0.3) !important;
     }
 
     .stDownloadButton > button {
         background: transparent !important;
-        color: #1C1209 !important;
-        border: 1px solid rgba(28,18,9,0.4) !important;
+        color: #0D2347 !important;
+        border: 1px solid rgba(13,35,71,0.4) !important;
         padding: 0.7rem 1.75rem !important;
         border-radius: 2px !important;
         font-family: 'DM Sans', sans-serif !important;
@@ -331,20 +331,20 @@ st.markdown("""
     .stDownloadButton > button *,
     .stDownloadButton > button p,
     .stDownloadButton > button span {
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     .stDownloadButton > button:hover,
     .stDownloadButton > button:hover * {
-        background: #1C1209 !important;
-        color: #F7F3EE !important;
-        border-color: #1C1209 !important;
+        background: #0D2347 !important;
+        color: #F5F8FC !important;
+        border-color: #0D2347 !important;
     }
 
     .stFormSubmitButton > button {
-        background: #C4A078 !important;
-        color: #1C1209 !important;
-        border: 1px solid #C4A078 !important;
+        background: #4A9FD4 !important;
+        color: #0D2347 !important;
+        border: 1px solid #4A9FD4 !important;
         padding: 0.7rem 2rem !important;
         border-radius: 2px !important;
         font-family: 'DM Sans', sans-serif !important;
@@ -360,28 +360,28 @@ st.markdown("""
     .stFormSubmitButton > button *,
     .stFormSubmitButton > button p,
     .stFormSubmitButton > button span {
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     .stFormSubmitButton > button:hover,
     .stFormSubmitButton > button:hover * {
-        background: #1C1209 !important;
-        color: #F7F3EE !important;
-        border-color: #1C1209 !important;
+        background: #0D2347 !important;
+        color: #F5F8FC !important;
+        border-color: #0D2347 !important;
         transform: translateY(-1px) !important;
     }
 
     /* ── Cards ── */
     .polar-card {
-        background: #FFFDF9;
-        border: 1px solid rgba(28,18,9,0.08);
+        background: #FFFFFF;
+        border: 1px solid rgba(13,35,71,0.08);
         border-radius: 4px;
         padding: 1.75rem;
         margin-bottom: 1rem;
     }
 
     .polar-card-dark {
-        background: #1C1209;
+        background: #0D2347;
         border: none;
         border-radius: 4px;
         padding: 1.75rem;
@@ -389,30 +389,30 @@ st.markdown("""
     }
 
     .polar-card-dark p, .polar-card-dark span, .polar-card-dark div, .polar-card-dark label {
-        color: rgba(247,243,238,0.75) !important;
+        color: rgba(245,248,252,0.75) !important;
     }
 
     .polar-card-dark h3 {
-        color: #F7F3EE !important;
+        color: #F5F8FC !important;
     }
 
     .polar-info-row {
-        background: #FFFDF9;
-        border-left: 3px solid #C4A078;
+        background: #FFFFFF;
+        border-left: 3px solid #4A9FD4;
         padding: 1rem 1.25rem;
         border-radius: 0 4px 4px 0;
         margin-bottom: 0.75rem;
         font-size: 0.875rem;
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
     }
 
     /* ── Alert / Info Boxes ── */
     .stAlert, [data-testid="stAlert"] {
-        background: #FFFDF9 !important;
-        border: 1px solid rgba(196,160,120,0.4) !important;
-        border-left: 3px solid #C4A078 !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(74,159,212,0.4) !important;
+        border-left: 3px solid #4A9FD4 !important;
         border-radius: 4px !important;
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
     }
 
     .stSuccess {
@@ -433,14 +433,14 @@ st.markdown("""
     /* ── Divider ── */
     hr {
         border: none !important;
-        border-top: 1px solid rgba(28,18,9,0.1) !important;
+        border-top: 1px solid rgba(13,35,71,0.1) !important;
         margin: 2.5rem 0 !important;
     }
 
     /* ── Metrics ── */
     [data-testid="stMetric"] {
-        background: #FFFDF9 !important;
-        border: 1px solid rgba(28,18,9,0.07) !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(13,35,71,0.07) !important;
         border-radius: 4px !important;
         padding: 1.25rem !important;
     }
@@ -450,13 +450,13 @@ st.markdown("""
         font-size: 0.65rem !important;
         letter-spacing: 0.15em !important;
         text-transform: uppercase !important;
-        color: #8B7355 !important;
+        color: #5F7A9D !important;
     }
 
     [data-testid="stMetricValue"] {
         font-family: 'Playfair Display', serif !important;
         font-size: 2rem !important;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
         font-weight: 600 !important;
     }
 
@@ -467,8 +467,8 @@ st.markdown("""
     /* ── Keyword Tags ── */
     .kw-tag {
         display: inline-block;
-        background: #1C1209;
-        color: #F7F3EE !important;
+        background: #0D2347;
+        color: #F5F8FC !important;
         padding: 0.3rem 0.85rem;
         border-radius: 2px;
         margin: 0.2rem;
@@ -481,8 +481,8 @@ st.markdown("""
     .kw-tag-light {
         display: inline-block;
         background: transparent;
-        color: #3D2B1F !important;
-        border: 1px solid rgba(28,18,9,0.25);
+        color: #1E3A6E !important;
+        border: 1px solid rgba(13,35,71,0.25);
         padding: 0.3rem 0.85rem;
         border-radius: 2px;
         margin: 0.2rem;
@@ -494,8 +494,8 @@ st.markdown("""
 
     /* ── Chat ── */
     .chat-bubble-user {
-        background: #1C1209;
-        color: #F7F3EE !important;
+        background: #0D2347;
+        color: #F5F8FC !important;
         padding: 1rem 1.25rem;
         border-radius: 4px 4px 4px 0;
         margin: 0.75rem 0;
@@ -504,18 +504,18 @@ st.markdown("""
     }
 
     .chat-bubble-user strong, .chat-bubble-user span, .chat-bubble-user div {
-        color: #F7F3EE !important;
+        color: #F5F8FC !important;
     }
 
     .chat-bubble-assistant {
-        background: #FFFDF9;
-        border: 1px solid rgba(28,18,9,0.09);
+        background: #FFFFFF;
+        border: 1px solid rgba(13,35,71,0.09);
         padding: 1rem 1.25rem;
         border-radius: 4px 4px 0 4px;
         margin: 0.75rem 0;
         font-size: 0.875rem;
         line-height: 1.6;
-        border-left: 3px solid #C4A078;
+        border-left: 3px solid #4A9FD4;
     }
 
     .chat-label {
@@ -527,14 +527,14 @@ st.markdown("""
         display: block;
     }
 
-    .chat-label-user { color: #C4A078 !important; }
-    .chat-label-ai { color: #8B7355 !important; }
+    .chat-label-user { color: #4A9FD4 !important; }
+    .chat-label-ai { color: #5F7A9D !important; }
 
     /* ── Text Input ── */
     .stTextInput > div > div > input {
-        background: #FFFDF9 !important;
-        color: #1C1209 !important;
-        border: 1px solid rgba(28,18,9,0.2) !important;
+        background: #FFFFFF !important;
+        color: #0D2347 !important;
+        border: 1px solid rgba(13,35,71,0.2) !important;
         border-radius: 2px !important;
         padding: 0.65rem 1rem !important;
         font-family: 'DM Sans', sans-serif !important;
@@ -543,16 +543,16 @@ st.markdown("""
     }
 
     .stTextInput > div > div > input:focus {
-        border-color: #C4A078 !important;
-        box-shadow: 0 0 0 3px rgba(196,160,120,0.12) !important;
+        border-color: #4A9FD4 !important;
+        box-shadow: 0 0 0 3px rgba(74,159,212,0.12) !important;
         outline: none !important;
     }
 
     /* ── Selectbox — trigger box ── */
     .stSelectbox > div > div,
     [data-testid="stSelectbox"] > div > div {
-        background: #FFFDF9 !important;
-        border: 1px solid rgba(28,18,9,0.2) !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(13,35,71,0.2) !important;
         border-radius: 2px !important;
     }
 
@@ -560,8 +560,8 @@ st.markdown("""
     .stSelectbox [data-baseweb="select"] > div,
     .stSelectbox [data-baseweb="select"] span,
     .stSelectbox [data-baseweb="select"] input {
-        background: #FFFDF9 !important;
-        color: #1C1209 !important;
+        background: #FFFFFF !important;
+        color: #0D2347 !important;
         font-family: 'DM Sans', sans-serif !important;
         font-size: 0.875rem !important;
     }
@@ -571,18 +571,18 @@ st.markdown("""
     [data-baseweb="menu"],
     ul[role="listbox"],
     [role="listbox"] {
-        background: #FFFDF9 !important;
-        border: 1px solid rgba(28,18,9,0.12) !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(13,35,71,0.12) !important;
         border-radius: 4px !important;
-        box-shadow: 0 8px 24px rgba(28,18,9,0.12) !important;
+        box-shadow: 0 8px 24px rgba(13,35,71,0.12) !important;
     }
 
     /* Each dropdown option */
     [role="option"],
     [data-baseweb="menu"] li,
     [data-baseweb="menu"] ul li {
-        background: #FFFDF9 !important;
-        color: #1C1209 !important;
+        background: #FFFFFF !important;
+        color: #0D2347 !important;
         font-family: 'DM Sans', sans-serif !important;
         font-size: 0.875rem !important;
     }
@@ -591,8 +591,8 @@ st.markdown("""
     [role="option"]:hover,
     [role="option"][aria-selected="true"],
     [data-baseweb="menu"] li:hover {
-        background: #F0E8DE !important;
-        color: #1C1209 !important;
+        background: #E3EDF8 !important;
+        color: #0D2347 !important;
     }
 
     /* ── Slider ── */
@@ -601,27 +601,27 @@ st.markdown("""
     }
 
     .stSlider [role="slider"] {
-        background: #1C1209 !important;
+        background: #0D2347 !important;
     }
 
     .stSlider [data-testid="stThumbValue"] {
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     /* ── Progress Bar ── */
     .stProgress > div > div > div {
-        background: #C4A078 !important;
+        background: #4A9FD4 !important;
     }
 
     /* ── Expander ── */
     .streamlit-expanderHeader {
-        background: #FFFDF9 !important;
-        border: 1px solid rgba(28,18,9,0.1) !important;
+        background: #FFFFFF !important;
+        border: 1px solid rgba(13,35,71,0.1) !important;
         border-radius: 4px !important;
         font-family: 'DM Sans', sans-serif !important;
         font-size: 0.8rem !important;
         letter-spacing: 0.05em !important;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     /* ── Database Document Item ── */
@@ -629,18 +629,18 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        background: #FFFDF9;
-        border: 1px solid rgba(28,18,9,0.08);
+        background: #FFFFFF;
+        border: 1px solid rgba(13,35,71,0.08);
         border-radius: 4px;
         padding: 0.85rem 1rem;
         margin-bottom: 0.5rem;
         font-size: 0.83rem;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     .doc-item::before {
         content: '↗';
-        color: #C4A078;
+        color: #4A9FD4;
         font-size: 1rem;
         flex-shrink: 0;
     }
@@ -650,8 +650,8 @@ st.markdown("""
         display: flex;
         gap: 2rem;
         padding: 1rem 1.5rem;
-        background: #FFFDF9;
-        border: 1px solid rgba(28,18,9,0.08);
+        background: #FFFFFF;
+        border: 1px solid rgba(13,35,71,0.08);
         border-radius: 4px;
         margin-bottom: 1.25rem;
         align-items: center;
@@ -664,7 +664,7 @@ st.markdown("""
         font-size: 0.72rem;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
         font-weight: 500;
     }
 
@@ -676,8 +676,8 @@ st.markdown("""
 
     /* ── Empty State ── */
     .empty-state {
-        background: #FFFDF9;
-        border: 1px dashed rgba(28,18,9,0.15);
+        background: #FFFFFF;
+        border: 1px dashed rgba(13,35,71,0.15);
         border-radius: 4px;
         padding: 4rem 2rem;
         text-align: center;
@@ -685,7 +685,7 @@ st.markdown("""
 
     .empty-state-glyph {
         font-size: 2rem;
-        color: #C4A078 !important;
+        color: #4A9FD4 !important;
         margin-bottom: 1rem;
         display: block;
         font-weight: 300;
@@ -694,13 +694,13 @@ st.markdown("""
     .empty-state-title {
         font-family: 'Playfair Display', serif;
         font-size: 1.1rem;
-        color: #3D2B1F !important;
+        color: #1E3A6E !important;
         margin-bottom: 0.5rem;
     }
 
     .empty-state-text {
         font-size: 0.82rem;
-        color: #8B7355 !important;
+        color: #5F7A9D !important;
         max-width: 320px;
         margin: 0 auto;
         line-height: 1.6;
@@ -710,7 +710,7 @@ st.markdown("""
     .polar-footer {
         margin-top: 4rem;
         padding: 2.5rem 0;
-        border-top: 1px solid rgba(28,18,9,0.1);
+        border-top: 1px solid rgba(13,35,71,0.1);
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -721,7 +721,7 @@ st.markdown("""
     .polar-footer-brand {
         font-family: 'Playfair Display', serif;
         font-size: 1rem;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
         font-weight: 600;
         letter-spacing: -0.01em;
     }
@@ -735,16 +735,16 @@ st.markdown("""
         font-size: 0.72rem;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: #8B7355 !important;
+        color: #5F7A9D !important;
         text-decoration: none;
         transition: color 0.2s;
     }
 
-    .polar-footer-links a:hover { color: #1C1209 !important; }
+    .polar-footer-links a:hover { color: #0D2347 !important; }
 
     .polar-footer-copy {
         font-size: 0.72rem;
-        color: #8B7355 !important;
+        color: #5F7A9D !important;
         letter-spacing: 0.05em;
     }
 
@@ -754,22 +754,23 @@ st.markdown("""
     /* ── Checkbox ── */
     .stCheckbox span {
         font-size: 0.83rem !important;
-        color: #1C1209 !important;
+        color: #0D2347 !important;
     }
 
     /* ── Tooltip ── */
-    .stTooltipIcon { color: #C4A078 !important; }
+    .stTooltipIcon { color: #4A9FD4 !important; }
 
     /* ── Subtle horizontal rule inside sections ── */
     .inner-rule {
         border: none;
-        border-top: 1px solid rgba(28,18,9,0.08);
+        border-top: 1px solid rgba(13,35,71,0.08);
         margin: 1.5rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ─── LOGO LOADING ──────────────────────────────────────────────────────────
+# iHARP logo
 logo_data = None
 logo_type = None
 logo_path = os.path.join(os.path.dirname(__file__), "..", "iharp-logo.jpg")
@@ -783,6 +784,19 @@ else:
         with open(logo_path, "rb") as f:
             logo_data = base64.b64encode(f.read()).decode()
         logo_type = "png"
+
+# UNT logo — tries project folder first, then desktop path as fallback
+unt_logo_data = None
+unt_logo_paths = [
+    os.path.join(os.path.dirname(__file__), "..", "unt-logo.png"),
+    os.path.join(os.path.dirname(__file__), "unt-logo.png"),
+    r"C:\Users\aeswa\OneDrive\Desktop\university-of-north-texas-vector-logo-seeklogo\university-of-north-texas-seeklogo.png",
+]
+for unt_path in unt_logo_paths:
+    if os.path.exists(unt_path):
+        with open(unt_path, "rb") as f:
+            unt_logo_data = base64.b64encode(f.read()).decode()
+        break
 
 # ─── SESSION STATE ─────────────────────────────────────────────────────────
 for key, default in [
@@ -798,15 +812,26 @@ for key, default in [
         st.session_state[key] = default
 
 # ─── HERO ──────────────────────────────────────────────────────────────────
-logo_html = ""
+iharp_logo_html = ""
 if logo_data and logo_type:
-    logo_html = f'<img src="data:image/{logo_type};base64,{logo_data}" style="height:52px;width:auto;margin-bottom:2rem;opacity:0.9;" alt="iHARP Logo">'
+    iharp_logo_html = f'<img src="data:image/{logo_type};base64,{logo_data}" style="height:48px;width:auto;margin-bottom:2rem;opacity:0.9;" alt="iHARP Logo">'
 
-# NOTE: No indentation inside the HTML string — Streamlit's markdown parser
-# treats lines with 4+ leading spaces as code blocks (Markdown spec).
+unt_logo_html = ""
+if unt_logo_data:
+    unt_logo_html = (
+        '<div style="position:absolute;top:1.5rem;right:2rem;'
+        'background:white;border-radius:50%;padding:6px;'
+        'box-shadow:0 2px 12px rgba(0,0,0,0.2);'
+        'display:flex;align-items:center;justify-content:center;">'
+        f'<img src="data:image/png;base64,{unt_logo_data}" '
+        'style="height:80px;width:80px;object-fit:contain;border-radius:50%;" alt="UNT Logo">'
+        '</div>'
+    )
+
 hero_html = (
     '<div class="polar-hero">'
-    + logo_html
+    + unt_logo_html
+    + iharp_logo_html
     + '<div class="hero-eyebrow">iHARP Research Initiative</div>'
     + '<div class="hero-title">Polar <em>Knowledge</em><br>Discovery Toolkit</div>'
     + '<div class="hero-subtitle">Extract climate variables, build semantic knowledge graphs, and interrogate polar science literature — all within a single intelligent workspace.</div>'
@@ -856,7 +881,7 @@ with col1:
         for i, file in enumerate(uploaded_files, 1):
             st.markdown(f'<div class="doc-item">{i}. {file.name} &nbsp;·&nbsp; {file.size // 1024} KB</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="margin-top:0.5rem;padding:0.75rem 1rem;background:#FFFDF9;border-radius:4px;border:1px solid rgba(28,18,9,0.08);font-size:0.8rem;color:#8B7355;">No files selected yet — drag PDFs above or click to browse.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="margin-top:0.5rem;padding:0.75rem 1rem;background:#FFFFFF;border-radius:4px;border:1px solid rgba(13,35,71,0.08);font-size:0.8rem;color:#5F7A9D;">No files selected yet — drag PDFs above or click to browse.</div>', unsafe_allow_html=True)
 
 with col2:
     st.markdown('<span class="section-label">Configuration</span>', unsafe_allow_html=True)
@@ -898,7 +923,7 @@ with col2:
             st.markdown('<span class="section-label">Q&A Configuration</span>', unsafe_allow_html=True)
             qa_model = st.selectbox(
                 "Select LLM Model",
-                options=["mistral:7b", "qwen2.5:7b", "llama3:latest", "gemma3:12b"],
+                options=["llama3", "mistral:7b", "llama3:latest", "gemma3:12b"],
                 index=0,
                 key="qa_model_dialog",
                 help="Ollama model for answering questions."
@@ -946,7 +971,7 @@ with col2:
             st.markdown('<span class="section-label">Knowledge Graph Configuration</span>', unsafe_allow_html=True)
             kg_model = st.selectbox(
                 "Select LLM Model for Relation Extraction",
-                options=["mistral:7b", "qwen2.5:7b", "llama3:latest", "gemma3:12b"],
+                options=["llama3", "mistral:7b", "llama3:latest", "gemma3:12b"],
                 index=0,
                 key="kg_model_dialog",
             )
@@ -1155,9 +1180,9 @@ st.markdown('<div class="section-heading">Knowledge <em>Graph</em></div>', unsaf
 
 st.markdown(
     '<div class="graph-legend">'
-    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#1C1209;"></div> Entity</div>'
-    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#C4A078;"></div> Relationship</div>'
-    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#5C3D2E;"></div> Concept</div>'
+    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#0D2347;"></div> Entity</div>'
+    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#4A9FD4;"></div> Relationship</div>'
+    '<div class="graph-legend-item"><div class="graph-legend-dot" style="background:#2E5FA0;"></div> Concept</div>'
     '</div>',
     unsafe_allow_html=True
 )
@@ -1187,18 +1212,18 @@ if st.session_state.processed_pdfs:
             st.markdown(f"**{filename}**")
             kw_html = "".join(f'<span class="kw-tag">{kw}</span>' for kw in keywords[:10])
             st.markdown(kw_html, unsafe_allow_html=True)
-        st.markdown(f"<small style='color:#8B7355;font-size:0.75rem;'>Total unique keywords: {len(set(all_keywords))}</small>", unsafe_allow_html=True)
+        st.markdown(f"<small style='color:#5F7A9D;font-size:0.75rem;'>Total unique keywords: {len(set(all_keywords))}</small>", unsafe_allow_html=True)
 
     try:
         neo = Neo4jConnector()
         all_nodes, all_relations, all_datasets = [], [], []
 
-        st.markdown(f"<small style='color:#8B7355;'>Combining data from {len(st.session_state.processed_pdfs)} files…</small>", unsafe_allow_html=True)
+        st.markdown(f"<small style='color:#5F7A9D;'>Combining data from {len(st.session_state.processed_pdfs)} files…</small>", unsafe_allow_html=True)
         for filename, data in st.session_state.processed_pdfs.items():
             nodes = data.get('nodes', [])
             relations = data.get('relations', [])
             file_datasets = data.get('datasets', [])
-            st.markdown(f"<small style='color:#8B7355;'>— {filename}: {len(nodes)} nodes · {len(relations)} relations · {len(file_datasets) if file_datasets else 0} dataset(s)</small>", unsafe_allow_html=True)
+            st.markdown(f"<small style='color:#5F7A9D;'>— {filename}: {len(nodes)} nodes · {len(relations)} relations · {len(file_datasets) if file_datasets else 0} dataset(s)</small>", unsafe_allow_html=True)
             all_nodes.extend(nodes)
             all_relations.extend(relations)
             if file_datasets:
@@ -1207,7 +1232,7 @@ if st.session_state.processed_pdfs:
                         all_datasets.append(ds)
 
         if all_nodes and all_relations:
-            st.markdown(f"<small style='color:#8B7355;'>Total: {len(all_nodes)} nodes · {len(all_relations)} relations · {len(all_datasets)} dataset(s)</small>", unsafe_allow_html=True)
+            st.markdown(f"<small style='color:#5F7A9D;'>Total: {len(all_nodes)} nodes · {len(all_relations)} relations · {len(all_datasets)} dataset(s)</small>", unsafe_allow_html=True)
             graph_type_to_use = 'with_datasets'
             if st.session_state.processed_pdfs:
                 first_file = list(st.session_state.processed_pdfs.keys())[0]
@@ -1244,17 +1269,17 @@ else:
     st.markdown(
         '<div class="empty-state">'
         '<svg width="120" height="120" viewBox="0 0 200 200" style="opacity:0.25;margin-bottom:1.5rem;">'
-        '<circle cx="100" cy="50" r="14" fill="#1C1209"/>'
-        '<circle cx="50" cy="110" r="14" fill="#1C1209"/>'
-        '<circle cx="150" cy="110" r="14" fill="#1C1209"/>'
-        '<circle cx="75" cy="160" r="14" fill="#1C1209"/>'
-        '<circle cx="125" cy="160" r="14" fill="#1C1209"/>'
-        '<circle cx="100" cy="100" r="18" fill="#C4A078"/>'
-        '<line x1="100" y1="100" x2="100" y2="50" stroke="#3D2B1F" stroke-width="1.5"/>'
-        '<line x1="100" y1="100" x2="50" y2="110" stroke="#3D2B1F" stroke-width="1.5"/>'
-        '<line x1="100" y1="100" x2="150" y2="110" stroke="#3D2B1F" stroke-width="1.5"/>'
-        '<line x1="100" y1="100" x2="75" y2="160" stroke="#3D2B1F" stroke-width="1.5"/>'
-        '<line x1="100" y1="100" x2="125" y2="160" stroke="#3D2B1F" stroke-width="1.5"/>'
+        '<circle cx="100" cy="50" r="14" fill="#0D2347"/>'
+        '<circle cx="50" cy="110" r="14" fill="#0D2347"/>'
+        '<circle cx="150" cy="110" r="14" fill="#0D2347"/>'
+        '<circle cx="75" cy="160" r="14" fill="#0D2347"/>'
+        '<circle cx="125" cy="160" r="14" fill="#0D2347"/>'
+        '<circle cx="100" cy="100" r="18" fill="#4A9FD4"/>'
+        '<line x1="100" y1="100" x2="100" y2="50" stroke="#B8CCE8" stroke-width="1.5"/>'
+        '<line x1="100" y1="100" x2="50" y2="110" stroke="#B8CCE8" stroke-width="1.5"/>'
+        '<line x1="100" y1="100" x2="150" y2="110" stroke="#B8CCE8" stroke-width="1.5"/>'
+        '<line x1="100" y1="100" x2="75" y2="160" stroke="#B8CCE8" stroke-width="1.5"/>'
+        '<line x1="100" y1="100" x2="125" y2="160" stroke="#B8CCE8" stroke-width="1.5"/>'
         '</svg>'
         '<div class="empty-state-title">No graph generated yet</div>'
         '<div class="empty-state-text">Upload PDFs and click "Generate Knowledge Graph" to visualise extracted climate variables and their relationships.</div>'
