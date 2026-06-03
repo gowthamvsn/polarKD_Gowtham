@@ -1,7 +1,55 @@
-# PDF to Knowledge Graph Generator
+# Arctic Research Dataset Harvester
 
-A local, private, and intelligent system to extract keywords and semantic relationships from uploaded research PDFs and generate an interactive Knowledge Graph.
-Built with Streamlit, Neo4j, Ollama, GPT-4o-mini, and PyVis.
+Upload arctic/environmental research PDFs → automatically extract every dataset reference → resolve to source repositories → download locally. No duplicates.
+
+---
+
+## Iteration Log
+
+| # | Date & Time (UTC) | Description | Status |
+|---|-------------------|-------------|--------|
+| 1.0 | 2026-06-02 09:45 | Project goal set: PDF upload → extract dataset refs → resolve → download locally. New `dataset_harvester/` module created. | ✅ Done |
+| 1.1 | 2026-06-02 10:00 | `extractor.py` — Pass 1: regex for URLs, DOIs, PANGAEA/Zenodo/NSIDC accessions, 25+ known arctic dataset names (ERA5, MODIS, CryoSat-2, PIOMAS…) | ✅ Done |
+| 1.2 | 2026-06-02 10:05 | `deduplicator.py` — merges refs by exact DOI/URL/accession then fuzzy name match (82% threshold) | ✅ Done |
+| 1.3 | 2026-06-02 10:10 | First test run — regex pass returned 30 results, mostly journal URLs and truncated DOIs. Too noisy. | 🔧 Fixed |
+| 1.4 | 2026-06-02 10:20 | Fixed regex pass: added journal URL domain blocklist, journal DOI prefix filter, truncated URL detection. Result dropped from 30 → 5 clean refs. | ✅ Done |
+| 1.5 | 2026-06-02 10:25 | `extractor.py` Pass 2: LLM extraction added. Backend priority: Azure OpenAI → regular OpenAI → Ollama fallback. OpenAI billing inactive; switched to Azure (`gpt-4.1-mini`). | ✅ Done |
+| 1.6 | 2026-06-02 10:30 | Fixed backend priority — Ollama was silently taking over instead of Azure. Azure now always runs first when credentials are present. | ✅ Done |
+| 1.7 | 2026-06-02 10:45 | Full run with Azure OpenAI on 3 arctic PDFs: 32 dataset refs extracted (ERA-Interim, TOPAZ, PIOMAS, AROME-Arctic, WAM models, NASA/NOAA datasets). Dedup working. | ✅ Done |
+| 2.0 | 2026-06-02 11:10 | `deduplicator.py` rewrite — alias table (ERA-Interim/reanalysis, PIOMAS variants, TOPAZ variants), core-name stripping, prefix matching. 34 raw refs -> 28 unique datasets. | ✅ Done |
+| 2.1 | 2026-06-02 11:15 | `resolver.py` built — 4-step resolution: existing URL → DOI (DataCite API) → known-dataset registry (40 arctic datasets hardcoded) → Zenodo/PANGAEA search. 22/28 resolved with live links. | ✅ Done |
+| 2.2 | 2026-06-02 11:20 | CLI updated to print resolved URLs per dataset with resolution method. Results also saved to `results/extraction_results.json`. | ✅ Done |
+| 3.0 | 2026-06-03 00:10 | `downloader.py` + `downloaders/` built — routes by repo type, manifest tracking, 200 MB per-file cap, auth instructions for ECMWF/NSIDC/Copernicus. | ✅ Done |
+| 3.1 | 2026-06-03 00:15 | First run: downloaded 34 calving-front ZIPs (Antarctic ice), MIZ wave data, IMU buoy data. But also pulled 1.6 GB IPCC AR6 archive and started an 8.8 GB file — killed. Root cause: Zenodo search returning unrelated records. | 🔧 Fixed |
+| 3.2 | 2026-06-03 00:25 | Added `_is_not_searchable()` for IPCC/preprint DOIs, word-overlap relevance check (min 2 words + domain term). Result: zero false downloads, but also blocked the valid MIZ arctic wave dataset. Filter too aggressive. | 🔧 In Progress |
+| 4.0 | — | Tune Zenodo relevance filter — whitelist known-good record IDs, domain-term boost scoring instead of hard cutoff. | 🔜 Next |
+| 4.1 | 2026-06-03 (status check) | Download status reviewed: partial success confirmed (iteration 3.1 pulled valid arctic data) but current filter (3.2) is blocking all Zenodo results including valid ones. Net result: downloads non-functional until filter is fixed. | 🔧 In Progress |
+| 4.2 | 2026-06-03 (live run) | Live run on arctic1.pdf: 15 raw refs → 10 unique datasets. 5 resolved (TOPAZ, ERA-Interim, WAM-4, WAM-3, AROME-Arctic). 5 unresolved (WII instruments, MIZ shipborne, WW3, SURFEX). Download step: ECMWF/Copernicus/NASA blocked (auth required), others landing-page-only. Zero files downloaded for arctic1.pdf — all resolved datasets are behind login walls or homepage-only URLs. Confirmed: Zenodo direct-download only works when Zenodo search returns a record; for this paper it didn't. | ℹ️ Noted |
+| 5.0 | 2026-06-03 | Cleanup + CSV-only filter. Deleted 3 junk downloads (6.8 GB IPCC archive, 34 Antarctic calving ZIPs, 72 MB unknown zip). Zenodo downloader now skips .zip/.nc/.xlsx — only downloads .csv/.txt/.tsv. Kept 2 valid folders: `zenodo_7954779` (IMU buoy CSVs — Southern Ocean buoy data, wrong region but correct format), `zenodo_8207442` (MIZ CryoSat-2 climate record TXT — valid Arctic MIZ data 2010–2022, lon/lat/region per track). Root issue confirmed: arctic1/arctic2 only reference model outputs (ERA-Interim, TOPAZ, PIOMAS, WAM) which all require auth. No freely downloadable CSV datasets in these papers. | ✅ Done |
+| 6.0 | 2026-06-03 | New paper: MOSAiC Distributed Network CTD buoy data (ESSD 2022, Hoppmann et al.) downloaded from Google Scholar. Paper has 19 explicit PANGAEA DOIs in text. Pipeline extracted 40 unique datasets from 140 raw refs. **7 files downloaded** — all PANGAEA tab-separated data files (temperature, conductivity, salinity from arctic CTD buoys 2019O1–O8, MOSAiC expedition 2019/2020). 5 PANGAEA records returned 400 errors (collection-level DOIs, not individual datasets). First successful clean run: real arctic measurement data, no junk. | ✅ Done |
+| 7.0 | 2026-06-03 | Built a UI inside the existing blue-themed app (`frontend_light_v2.py`). Now when you upload a PDF, it automatically reads through it, finds all dataset names and links, checks which ones can actually be downloaded, and shows the results on screen — no extra steps needed. Shows how long it took for each step and in total. | ✅ Done |
+
+---
+
+## Pipeline Overview
+
+```
+PDF(s)
+  └─► Layer 1: Extraction    — regex (URLs/DOIs) + LLM (implicit mentions)
+        └─► Layer 2: Dedup   — normalize DOIs, fuzzy-match names
+              └─► Layer 3: Resolve — DataCite API, PANGAEA/Zenodo search
+                    └─► Layer 4: Download — per-repository downloaders + manifest
+```
+
+Target repositories: PANGAEA · Zenodo · Copernicus CDS (ERA5) · NSIDC · Arctic Data Center · generic URLs
+
+---
+
+## Previous Work (Knowledge Graph Generator)
+
+> The original knowledge graph / Q&A system remains in `Knowledge_graph/Code/`. The new dataset harvester pipeline lives in `dataset_harvester/`.
+
+
 
 ## Table of Contents
 

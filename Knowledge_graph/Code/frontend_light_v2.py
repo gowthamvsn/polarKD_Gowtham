@@ -10,10 +10,87 @@ from frontend_dataset_display import (
     export_datasets_to_csv
 )
 import os
+import sys
+import re
 import base64
 from io import BytesIO
 import json
 import pandas as pd
+import tempfile
+import requests
+
+# ── Dataset Harvester imports ──────────────────────────────────────────────
+_harvester_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dataset_harvester"))
+if _harvester_path not in sys.path:
+    sys.path.insert(0, _harvester_path)
+try:
+    from extractor import extract_from_pdfs
+    from deduplicator import deduplicate
+    from resolver import resolve, ResolvedDataset
+    _HARVESTER_AVAILABLE = True
+except Exception:
+    _HARVESTER_AVAILABLE = False
+
+# ── Downloadability checker ────────────────────────────────────────────────
+_AUTH_REQUIRED = {
+    "nsidc", "nasa_earthdata", "copernicus_cds", "copernicus_marine",
+    "ecmwf", "esa", "jma", "ncar_rda",
+}
+_LANDING_PAGE_ONLY = {
+    "uw_apl", "met_norway", "noaa", "noaa_ncei", "noaa_psl",
+    "usgs", "argo", "gebco", "other",
+}
+_CSV_EXTS = {".csv", ".txt", ".tsv", ".tab"}
+
+def _pangaea_id(r):
+    for s in [r.resolved_url or "", r.doi or "", r.accession or ""]:
+        m = re.search(r'PANGAEA\.(\d+)', s, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    return None
+
+def _zenodo_id(r):
+    for s in [r.resolved_url or "", r.doi or ""]:
+        m = re.search(r'zenodo\.org/(?:records?/)?(\d+)|zenodo\.(\d+)', s, re.IGNORECASE)
+        if m:
+            return m.group(1) or m.group(2)
+    return None
+
+def check_downloadable(r):
+    if not r.resolved_url:
+        return "❌ No URL", "Dataset not resolved"
+    repo = (r.repository or "").lower()
+    if repo in _AUTH_REQUIRED:
+        return "🔐 Login required", f"Needs account on {repo}"
+    if repo in _LANDING_PAGE_ONLY:
+        return "🌐 Homepage only", "No direct file — manual download"
+    if repo == "pangaea" or "pangaea" in (r.resolved_url or "").lower():
+        pid = _pangaea_id(r)
+        if pid:
+            try:
+                resp = requests.head(
+                    f"https://doi.pangaea.de/10.1594/PANGAEA.{pid}?format=textfile",
+                    timeout=6, allow_redirects=True
+                )
+                if resp.status_code == 200:
+                    return "✅ Downloadable", "PANGAEA tab-separated file"
+                return "📦 Collection", "Parent record — contains child datasets"
+            except Exception:
+                return "❓ Unknown", "Could not reach PANGAEA"
+    if repo == "zenodo" or "zenodo" in (r.resolved_url or "").lower():
+        zid = _zenodo_id(r)
+        if zid:
+            try:
+                resp = requests.get(f"https://zenodo.org/api/records/{zid}", timeout=6)
+                if resp.status_code == 200:
+                    files = resp.json().get("files", [])
+                    csv_files = [f for f in files if os.path.splitext(f.get("key","").lower())[1] in _CSV_EXTS]
+                    if csv_files:
+                        return "✅ Downloadable", f"Zenodo: {len(csv_files)} CSV/text file(s)"
+                    return "❌ No CSV files", "Zenodo record has no CSV/text files"
+            except Exception:
+                return "❓ Unknown", "Could not reach Zenodo"
+    return "🌐 Homepage only", "Landing page — no direct file"
 
 # Page config
 st.set_page_config(
@@ -807,6 +884,9 @@ for key, default in [
     ('current_graph', None),
     ('show_qa_dialog', False),
     ('show_kg_dialog', False),
+    ('harvester_cache_key', None),
+    ('harvester_results', None),
+    ('harvester_elapsed', None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -1105,6 +1185,111 @@ with col2:
             for ds in set(all_datasets):
                 st.markdown(f'<div class="polar-info-row">◎ {ds}</div>', unsafe_allow_html=True)
 
+
+# ══════════════════════════════════════════════════════════════════════════
+#  SECTION 1b — DATASET HARVESTER (auto-runs on upload)
+# ══════════════════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown('<span class="section-label">Dataset Intelligence</span>', unsafe_allow_html=True)
+st.markdown('<div class="section-heading">Referenced <em>Datasets</em></div>', unsafe_allow_html=True)
+
+if not _HARVESTER_AVAILABLE:
+    st.warning("Dataset harvester module not found — check that `dataset_harvester/` is in the project root.")
+elif uploaded_files and len(uploaded_files) > 0:
+    cache_key = "_".join(f"{f.name}:{f.size}" for f in uploaded_files)
+
+    if st.session_state.get("harvester_cache_key") != cache_key:
+        st.session_state.harvester_cache_key = cache_key
+        st.session_state.harvester_results = None
+
+    if st.session_state.get("harvester_results") is None:
+        import time as _time
+        _t0 = _time.time()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdf_paths = []
+            for f in uploaded_files:
+                f.seek(0)
+                p = os.path.join(tmpdir, f.name)
+                with open(p, "wb") as out:
+                    out.write(f.read())
+                pdf_paths.append(p)
+
+            with st.status("🔍 Extracting dataset references…", expanded=True) as s1:
+                _t1 = _time.time()
+                refs_by_source = extract_from_pdfs(pdf_paths, use_llm=True)
+                raw_count = sum(len(v) for v in refs_by_source.values())
+                s1.update(label=f"✅ {raw_count} raw references extracted ({_time.time()-_t1:.1f}s)", state="complete", expanded=False)
+
+            with st.status("🔗 Deduplicating…", expanded=True) as s2:
+                _t2 = _time.time()
+                datasets = deduplicate(refs_by_source)
+                s2.update(label=f"✅ {raw_count} raw → {len(datasets)} unique datasets ({_time.time()-_t2:.1f}s)", state="complete", expanded=False)
+
+            with st.status("🌐 Resolving URLs…", expanded=True) as s3:
+                _t3 = _time.time()
+                resolved = resolve(datasets)
+                resolved_count = sum(1 for r in resolved if r.resolved_url)
+                s3.update(label=f"✅ {resolved_count} of {len(resolved)} datasets resolved ({_time.time()-_t3:.1f}s)", state="complete", expanded=False)
+
+            with st.status("⬇️ Checking downloadability…", expanded=True) as s4:
+                _t4 = _time.time()
+                rows = []
+                for r in resolved:
+                    status_label, detail = check_downloadable(r)
+                    rows.append({
+                        "Dataset": r.canonical_name,
+                        "URL": r.resolved_url or "",
+                        "Repository": r.repository or "unknown",
+                        "Status": status_label,
+                        "Detail": detail,
+                    })
+                downloadable_count = sum(1 for row in rows if row["Status"].startswith("✅"))
+                s4.update(label=f"✅ {downloadable_count} datasets ready to download ({_time.time()-_t4:.1f}s)", state="complete", expanded=False)
+
+        st.session_state.harvester_results = rows
+        st.session_state.harvester_elapsed = _time.time() - _t0
+
+    rows = st.session_state.harvester_results
+    if rows:
+        downloadable_count = sum(1 for r in rows if r["Status"].startswith("✅"))
+        elapsed = st.session_state.get("harvester_elapsed")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Datasets found", len(rows))
+        c2.metric("URLs resolved", sum(1 for r in rows if r["URL"]))
+        c3.metric("Ready to download", downloadable_count)
+        c4.metric("Time taken", f"{elapsed:.1f}s" if elapsed else "—")
+
+        tab1, tab2 = st.tabs([f"✅ Downloadable ({downloadable_count})", f"📋 All ({len(rows)})"])
+
+        def _render_table(data):
+            display = [{
+                "Dataset": row["Dataset"][:85] + ("…" if len(row["Dataset"]) > 85 else ""),
+                "URL": row["URL"],
+                "Repository": row["Repository"],
+                "Status": row["Status"],
+                "Detail": row["Detail"],
+            } for row in data]
+            st.dataframe(display, use_container_width=True, hide_index=True,
+                column_config={
+                    "URL": st.column_config.LinkColumn("URL", display_text="🔗 Open"),
+                    "Status": st.column_config.TextColumn("Status", width="medium"),
+                })
+
+        with tab1:
+            dl = [r for r in rows if r["Status"].startswith("✅")]
+            if dl:
+                _render_table(dl)
+            else:
+                st.info("No directly downloadable datasets found in this paper.")
+        with tab2:
+            _render_table(rows)
+else:
+    st.markdown(
+        '<div style="padding:1rem;background:#F0F4FA;border-radius:6px;color:#5F7A9D;font-size:0.85rem;">'
+        'Upload PDFs above — dataset references will appear here automatically.</div>',
+        unsafe_allow_html=True
+    )
 
 # ══════════════════════════════════════════════════════════════════════════
 #  SECTION 2 — Q&A
