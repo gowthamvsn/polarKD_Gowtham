@@ -28,6 +28,100 @@ Upload arctic/environmental research PDFs → automatically extract every datase
 | 5.0 | 2026-06-03 | Cleanup + CSV-only filter. Deleted 3 junk downloads (6.8 GB IPCC archive, 34 Antarctic calving ZIPs, 72 MB unknown zip). Zenodo downloader now skips .zip/.nc/.xlsx — only downloads .csv/.txt/.tsv. Kept 2 valid folders: `zenodo_7954779` (IMU buoy CSVs — Southern Ocean buoy data, wrong region but correct format), `zenodo_8207442` (MIZ CryoSat-2 climate record TXT — valid Arctic MIZ data 2010–2022, lon/lat/region per track). Root issue confirmed: arctic1/arctic2 only reference model outputs (ERA-Interim, TOPAZ, PIOMAS, WAM) which all require auth. No freely downloadable CSV datasets in these papers. | ✅ Done |
 | 6.0 | 2026-06-03 | New paper: MOSAiC Distributed Network CTD buoy data (ESSD 2022, Hoppmann et al.) downloaded from Google Scholar. Paper has 19 explicit PANGAEA DOIs in text. Pipeline extracted 40 unique datasets from 140 raw refs. **7 files downloaded** — all PANGAEA tab-separated data files (temperature, conductivity, salinity from arctic CTD buoys 2019O1–O8, MOSAiC expedition 2019/2020). 5 PANGAEA records returned 400 errors (collection-level DOIs, not individual datasets). First successful clean run: real arctic measurement data, no junk. | ✅ Done |
 | 7.0 | 2026-06-03 | Built a UI inside the existing blue-themed app (`frontend_light_v2.py`). Now when you upload a PDF, it automatically reads through it, finds all dataset names and links, checks which ones can actually be downloaded, and shows the results on screen — no extra steps needed. Shows how long it took for each step and in total. | ✅ Done |
+| 8.0 | 2026-06-04 | Added primary/secondary dataset classification. `DatasetRef`, `DeduplicatedDataset`, `ResolvedDataset` all gain an `is_primary` field. LLM prompt updated to label the one central dataset of the paper as primary. `app.py` shows a highlighted "⭐ Primary Dataset" card at top with name, repository, status, and direct link. All tables show a Role column (⭐ Primary / Secondary) in every tab. | ✅ Done |
+| 8.1 | 2026-06-04 | Fixed `bool("false")` parsing bug — Python treats non-empty string `"false"` as `True`. Changed to explicit `raw_val is True` check so LLM string responses parse correctly. | ✅ Done |
+| 8.2 | 2026-06-04 | Added heuristic fallback for primary detection: if the LLM (processing in 3000-char chunks) does not mark any dataset as primary, the most-mentioned dataset is automatically designated primary with a note "(identified by mention frequency)". Ensures primary card is never empty. | ✅ Done |
+| 8.3 | 2026-06-04 | Fixed app crash/timeout (page going null after 2 min). Root cause: Steps 3+4 made HTTP calls sequentially — up to 10s × 40 datasets = 400s. Fix: Steps 3+4 combined into one `ThreadPoolExecutor(max_workers=10)` parallel pass. All resolve + downloadability checks run concurrently. Added live progress bar showing X/N processed. All external timeouts reduced from 10s/8s → 5s. | ✅ Done |
+| 8.4 | 2026-06-04 | Added session-state result cache keyed by (filename, size, version). Re-uploading the same PDF now shows results instantly without re-running the pipeline. Cache version bumped to 2 to invalidate old runs missing the `_mention_count` field. | ✅ Done |
+| 8.5 | 2026-06-04 | Fixed primary/secondary not showing in main app. Root cause: all changes (primary card, Role column, parallel execution, heuristic fallback) were applied only to `dataset_harvester/app.py` but the UI everyone sees is in `frontend_light_v2.py`, which had its own separate harvester section. Applied all fixes to `frontend_light_v2.py`: parallel Steps 3+4, `_is_primary`/`_mention_count` in rows, primary dataset card, Role column in every table. | ✅ Done |
+| 8.6 | 2026-06-04 | Regex gap analysis after full run on essd-14-4901-2022.pdf (71 regex / 72 LLM refs — nearly equal split). Identified 6 gaps where regex could absorb LLM work: (1) 75 URLs dropped as "no-hint" because `_repo_hint_from_url` only covers ~7 domains — missing figshare, dryad, dataverse.harvard.edu, osf.io, marine.copernicus.eu (CMEMS), seanoe.org, bco-dmo.org, mendeley.com; (2) `_KNOWN_DATASETS` missing common names found by LLM: CMIP5, CMIP6, WRF, HYCOM, FESOM, GLORYS, OSTIA, OSI-SAF, SMOS, CALIPSO, GPM/IMERG, GPCP, TOPAZ4, AWI-CM, MPI-ESM; (3) No accession/URL patterns for Figshare, Dryad, or BCO-DMO records; (4) No pre-targeting of the "Data Availability" section — that section contains the highest density of refs but is chunked uniformly with the rest; (5) No contextual phrase patterns ("available at", "downloaded from", "obtained from") that appear before unlabelled dataset names or URLs; (6) DOI identification relies on a journal blocklist — adding a known data-prefix whitelist (10.1594, 10.5281, 10.7289, 10.5067) would improve precision. | ✅ Done |
+| 8.7 | 2026-06-04 | Implemented all 6 regex improvements + LLM chunk pre-filter in `extractor.py`. (1) `_repo_hint_from_url` expanded from 7 to 20 domains (added figshare, dryad, dataverse, osf.io, CMEMS, seanoe, bco-dmo, mendeley, bodc, ornl, usgs, gfz); (2) `_KNOWN_DATASETS` expanded from 43 to 63 entries (CMIP3/5/6, HYCOM, FESOM, GLORYS, OSTIA, GPM, IMERG, GPCP, CALIPSO, AWI-CM, MPI-ESM, CESM, etc.); (3) `_DATA_REPO_DOI_PREFIXES` whitelist added (14 known data prefixes) so data DOIs are always kept regardless of blocklist; (4) `_DATA_CONTEXT_RE` pattern added — URLs preceded by "available at / downloaded from / obtained from / deposited at" are now kept even without a repo hint; (5) `_hint_for_known` updated to map new names to repos (GLORYS/OSTIA → cmems, GPM/CALIPSO → nasa_earthdata, GPCP → noaa); (6) Chunk pre-filter added to LLM pass: chunks with no dataset signals (known names, DOI patterns, repo names, field-work terms) are skipped entirely. Report now shows total vs skipped vs sent counts and [cN] original chunk index per row. | ✅ Done |
+| 8.8 | 2026-06-04 | Verified 8.7 on essd-14-4901-2022.pdf. Results: 37 → 35 LLM calls (2 skipped), 211.9s → 208.2s (~1.8% time saving), $0.03701 → $0.03474 cost, LLM refs 72 → 66, combined raw refs 143 → 137. Pre-filter only skipped 2 chunks (title area + very end) because words like "measurement", "observation", "CTD", "buoy" appear in almost every chunk of an oceanographic paper — confirmed prediction. Real gain is quality: regex now catches 6 things previously found only by LLM (expanded known-dataset list working). Time reduction is negligible. To meaningfully cut time: (a) increase chunk size 3000 → 6000 chars (~half the calls), (b) target only Methods + Data Availability sections, or (c) run LLM calls in parallel. | ℹ️ Noted |
+
+
+
+
+
+  cd Knowledge_graph\Code
+  ..\venv\Scripts\streamlit.exe run frontend_light_v2.py
+---
+
+## How It Works — Plain English
+
+### What the original code had
+The original app (`frontend_light_v2.py`) could upload PDFs and either build a Knowledge Graph or answer questions. No dataset tracking.
+
+---
+
+### What we added and how
+
+#### 1. `extractor.py` — Read the paper and find dataset names
+
+Two passes over the PDF text:
+
+**Pass 1 — Regex (pattern matching)**
+Rule: *If it looks like a URL, DOI, or accession number, grab it.*
+- Finds anything starting with `https://doi.org/10.1594/PANGAEA...`
+- Finds DOIs like `10.5281/zenodo.12345`
+- Finds accession codes like `PANGAEA.937271`
+- Blocks journal URLs (nature.com, elsevier.com etc.) so it doesn't pick up paper citations
+
+**Pass 2 — LLM (Azure OpenAI gpt-4.1-mini)**
+Rule: *Read the text like a human and find dataset names that have no link.*
+- Catches things like "forced by ERA-Interim reanalysis" or "using TOPAZ model output" — no URL, but clearly a dataset
+- Returns structured JSON: name, type, where it came from
+
+---
+
+#### 2. `deduplicator.py` — Merge duplicates
+
+Rule: *If two names mean the same thing, keep only one.*
+- Exact match on DOI or URL → same dataset
+- Fuzzy name match at 82% similarity → same dataset
+- Alias table handles known variants: `ERA-Interim = ECMWF reanalysis`, `PIOMAS = Pan-Arctic Ice Ocean Model`
+- Picks the most descriptive name as the canonical one
+
+---
+
+#### 3. `resolver.py` — Find the actual URL for each dataset
+
+Tries 5 methods in order, stops at the first one that works:
+
+1. Already has a URL in the paper → use it directly
+2. Has a DOI → call DataCite API → get the repository landing page
+3. Name matches the hardcoded registry (40 known arctic datasets: ERA5, TOPAZ, PIOMAS, CryoSat-2…) → use the known URL
+4. Search PANGAEA by dataset name → use first result
+5. Search Zenodo by dataset name → use first result (with domain word filter to avoid junk)
+6. Nothing worked → mark as unresolved
+
+---
+
+#### 4. `downloaders/` — Actually download the file
+
+Rules per repository type:
+
+| Repository | Rule |
+|---|---|
+| PANGAEA | Build URL as `doi.pangaea.de/10.1594/PANGAEA.{id}?format=textfile` → download tab-separated file |
+| Zenodo | Call Zenodo API → get file list → download only `.csv/.txt/.tsv`, skip `.zip/.nc/.xlsx` |
+| ECMWF, Copernicus, NASA | Skip — print login instructions instead |
+| NOAA, met.no, homepage-only | Skip — show the URL, user downloads manually |
+| Already downloaded | Skip — `manifest.json` tracks what's been done |
+
+---
+
+#### 5. `frontend_light_v2.py` — Show results in the app automatically
+
+Rule: *As soon as a PDF is uploaded, run the pipeline and display results.*
+- Added harvester imports at the top
+- Added `check_downloadable()` — makes a live HTTP call to PANGAEA/Zenodo to confirm if a file is actually there right now
+- Added a new section between the upload area and Q&A — runs automatically when files are uploaded
+- Results cached in session state so re-clicking anything doesn't re-run the whole pipeline
+- Shows time taken per step and total
+
+---
+
+**In one sentence:** The app reads a research PDF like a scientist would — spotting every dataset mentioned, finding where it lives online, and checking whether you can download it right now or need to log in first.
 
 ---
 

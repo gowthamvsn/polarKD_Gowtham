@@ -255,7 +255,7 @@ def _resolve_doi(doi: str) -> Optional[dict]:
     try:
         r = requests.get(
             f"https://api.datacite.org/dois/{clean}",
-            timeout=10,
+            timeout=5,
             headers={"Accept": "application/json"},
         )
         if r.status_code != 200:
@@ -312,7 +312,7 @@ def _search_zenodo(name: str) -> Optional[dict]:
         r = requests.get(
             "https://zenodo.org/api/records",
             params={"q": name, "type": "dataset", "size": 3},
-            timeout=10,
+            timeout=5,
         )
         if r.status_code != 200:
             return None
@@ -353,7 +353,7 @@ def _search_pangaea(name: str) -> Optional[dict]:
         r = requests.get(
             "https://www.pangaea.de/api/find",
             params={"q": name, "count": 1, "format": "json"},
-            timeout=10,
+            timeout=5,
         )
         if r.status_code != 200:
             return None
@@ -385,6 +385,7 @@ class ResolvedDataset:
     resolution_method: str   # "existing_url"|"doi"|"known_registry"|"zenodo"|"pangaea"|"unresolved"
     mention_count: int
     sources: list[str]
+    is_primary: bool = False
 
     def to_dict(self) -> dict:
         return self.__dict__
@@ -393,9 +394,13 @@ class ResolvedDataset:
 def resolve(datasets: list[DeduplicatedDataset]) -> list[ResolvedDataset]:
     resolved = []
     for d in datasets:
-        result = _resolve_one(d)
+        result = resolve_one(d)
         resolved.append(result)
     return resolved
+
+
+def resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
+    return _resolve_one(d)
 
 
 def _resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
@@ -405,6 +410,7 @@ def _resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
         accession=d.accession,
         mention_count=d.mention_count,
         sources=d.sources,
+        is_primary=d.is_primary,
     )
 
     # 1. Already has a URL

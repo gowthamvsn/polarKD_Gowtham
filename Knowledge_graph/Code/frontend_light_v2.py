@@ -26,7 +26,8 @@ if _harvester_path not in sys.path:
 try:
     from extractor import extract_from_pdfs
     from deduplicator import deduplicate
-    from resolver import resolve, ResolvedDataset
+    from resolver import resolve_one, ResolvedDataset
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
     _HARVESTER_AVAILABLE = True
 except Exception:
     _HARVESTER_AVAILABLE = False
@@ -57,40 +58,41 @@ def _zenodo_id(r):
     return None
 
 def check_downloadable(r):
+    """Returns (status_key, label, detail)."""
     if not r.resolved_url:
-        return "❌ No URL", "Dataset not resolved"
+        return "none", "❌ No URL", "Dataset not resolved"
     repo = (r.repository or "").lower()
     if repo in _AUTH_REQUIRED:
-        return "🔐 Login required", f"Needs account on {repo}"
+        return "auth", "🔐 Login required", f"Needs account on {repo}"
     if repo in _LANDING_PAGE_ONLY:
-        return "🌐 Homepage only", "No direct file — manual download"
+        return "page", "🌐 Homepage only", "No direct file — manual download"
     if repo == "pangaea" or "pangaea" in (r.resolved_url or "").lower():
         pid = _pangaea_id(r)
         if pid:
             try:
                 resp = requests.head(
                     f"https://doi.pangaea.de/10.1594/PANGAEA.{pid}?format=textfile",
-                    timeout=6, allow_redirects=True
+                    timeout=5, allow_redirects=True
                 )
                 if resp.status_code == 200:
-                    return "✅ Downloadable", "PANGAEA tab-separated file"
-                return "📦 Collection", "Parent record — contains child datasets"
+                    return "yes", "✅ Downloadable", "PANGAEA tab-separated file"
+                return "collection", "📦 Collection", "Parent record — contains child datasets"
             except Exception:
-                return "❓ Unknown", "Could not reach PANGAEA"
+                return "unknown", "❓ Unknown", "Could not reach PANGAEA"
     if repo == "zenodo" or "zenodo" in (r.resolved_url or "").lower():
         zid = _zenodo_id(r)
         if zid:
             try:
-                resp = requests.get(f"https://zenodo.org/api/records/{zid}", timeout=6)
+                resp = requests.get(f"https://zenodo.org/api/records/{zid}", timeout=5)
                 if resp.status_code == 200:
                     files = resp.json().get("files", [])
                     csv_files = [f for f in files if os.path.splitext(f.get("key","").lower())[1] in _CSV_EXTS]
                     if csv_files:
-                        return "✅ Downloadable", f"Zenodo: {len(csv_files)} CSV/text file(s)"
-                    return "❌ No CSV files", "Zenodo record has no CSV/text files"
+                        return "yes", "✅ Downloadable", f"Zenodo: {len(csv_files)} CSV/text file(s)"
+                    return "no_csv", "❌ No CSV files", "Zenodo record has no CSV/text files"
             except Exception:
-                return "❓ Unknown", "Could not reach Zenodo"
-    return "🌐 Homepage only", "Landing page — no direct file"
+                return "unknown", "❓ Unknown", "Could not reach Zenodo"
+    return "page", "🌐 Homepage only", "Landing page — no direct file"
 
 # Page config
 st.set_page_config(
@@ -1206,6 +1208,7 @@ elif uploaded_files and len(uploaded_files) > 0:
         import time as _time
         _t0 = _time.time()
 
+        # Steps 1+2 need the PDF files on disk
         with tempfile.TemporaryDirectory() as tmpdir:
             pdf_paths = []
             for f in uploaded_files:
@@ -1226,45 +1229,99 @@ elif uploaded_files and len(uploaded_files) > 0:
                 datasets = deduplicate(refs_by_source)
                 s2.update(label=f"✅ {raw_count} raw → {len(datasets)} unique datasets ({_time.time()-_t2:.1f}s)", state="complete", expanded=False)
 
-            with st.status("🌐 Resolving URLs…", expanded=True) as s3:
-                _t3 = _time.time()
-                resolved = resolve(datasets)
-                resolved_count = sum(1 for r in resolved if r.resolved_url)
-                s3.update(label=f"✅ {resolved_count} of {len(resolved)} datasets resolved ({_time.time()-_t3:.1f}s)", state="complete", expanded=False)
+        # Steps 3+4: resolve + check in parallel (no files needed)
+        def _resolve_and_check(d):
+            r = resolve_one(d)
+            sk, lbl, det = check_downloadable(r)
+            return r, sk, lbl, det
 
-            with st.status("⬇️ Checking downloadability…", expanded=True) as s4:
-                _t4 = _time.time()
-                rows = []
-                for r in resolved:
-                    status_label, detail = check_downloadable(r)
-                    rows.append({
-                        "Dataset": r.canonical_name,
-                        "URL": r.resolved_url or "",
-                        "Repository": r.repository or "unknown",
-                        "Status": status_label,
-                        "Detail": detail,
-                    })
-                downloadable_count = sum(1 for row in rows if row["Status"].startswith("✅"))
-                s4.update(label=f"✅ {downloadable_count} datasets ready to download ({_time.time()-_t4:.1f}s)", state="complete", expanded=False)
+        rows = [None] * len(datasets)
+        with st.status(f"🌐 Resolving & checking {len(datasets)} datasets…", expanded=True) as s34:
+            _prog = st.progress(0, text="Starting…")
+            _done = 0
+            with ThreadPoolExecutor(max_workers=10) as _pool:
+                _futures = {_pool.submit(_resolve_and_check, d): i for i, d in enumerate(datasets)}
+                for _fut in _as_completed(_futures):
+                    _idx = _futures[_fut]
+                    try:
+                        _r, _sk, _lbl, _det = _fut.result()
+                    except Exception as _exc:
+                        _d = datasets[_idx]
+                        _r = ResolvedDataset(
+                            canonical_name=_d.canonical_name, resolved_url=None,
+                            repository=None, doi=_d.doi, accession=_d.accession,
+                            notes=str(_exc), resolution_method="unresolved",
+                            mention_count=_d.mention_count, sources=_d.sources,
+                            is_primary=_d.is_primary,
+                        )
+                        _sk, _lbl, _det = "unknown", "❓ Error", str(_exc)
+                    rows[_idx] = {
+                        "Dataset": _r.canonical_name,
+                        "URL": _r.resolved_url or "",
+                        "Repository": _r.repository or "unknown",
+                        "Status": _lbl,
+                        "Detail": _det,
+                        "_status_key": _sk,
+                        "_is_primary": _r.is_primary,
+                        "_mention_count": _r.mention_count,
+                    }
+                    _done += 1
+                    _prog.progress(_done / len(datasets), text=f"{_done}/{len(datasets)} processed")
+            _resolved_count = sum(1 for row in rows if row["URL"])
+            _dl_count = sum(1 for row in rows if row["_status_key"] == "yes")
+            s34.update(label=f"✅ {_resolved_count} resolved · {_dl_count} downloadable ({_time.time()-_t0:.1f}s total)", state="complete", expanded=False)
 
         st.session_state.harvester_results = rows
         st.session_state.harvester_elapsed = _time.time() - _t0
 
     rows = st.session_state.harvester_results
     if rows:
-        downloadable_count = sum(1 for r in rows if r["Status"].startswith("✅"))
+        # Heuristic fallback: if LLM didn't pick a primary, use highest mention count
+        if not any(r["_is_primary"] for r in rows):
+            best = max(rows, key=lambda r: r["_mention_count"])
+            best["_is_primary"] = True
+            best["_primary_how"] = "heuristic"
+        for r in rows:
+            if "_primary_how" not in r:
+                r["_primary_how"] = "llm" if r["_is_primary"] else ""
+
+        primary_rows = [r for r in rows if r["_is_primary"]]
+        downloadable_count = sum(1 for r in rows if r["_status_key"] == "yes")
         elapsed = st.session_state.get("harvester_elapsed")
-        c1, c2, c3, c4 = st.columns(4)
+
+        # Metrics
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Datasets found", len(rows))
-        c2.metric("URLs resolved", sum(1 for r in rows if r["URL"]))
-        c3.metric("Ready to download", downloadable_count)
-        c4.metric("Time taken", f"{elapsed:.1f}s" if elapsed else "—")
+        c2.metric("Primary dataset", len(primary_rows))
+        c3.metric("Secondary datasets", len(rows) - len(primary_rows))
+        c4.metric("Ready to download", downloadable_count)
+        c5.metric("Time taken", f"{elapsed:.1f}s" if elapsed else "—")
 
-        tab1, tab2 = st.tabs([f"✅ Downloadable ({downloadable_count})", f"📋 All ({len(rows)})"])
+        st.divider()
 
+        # Primary dataset card
+        st.markdown("#### ⭐ Primary Dataset")
+        for p in primary_rows:
+            badge = " <span style='font-size:0.75rem;color:#8899AA'>(identified by mention frequency)</span>" if p["_primary_how"] == "heuristic" else ""
+            st.markdown(
+                f"""<div style="border:2px solid #3A6BC4;border-radius:8px;padding:0.9rem 1.2rem;
+                            background:#EEF3FB;margin-bottom:0.6rem;">
+  <strong style="font-size:1rem">{p['Dataset']}</strong>{badge}<br>
+  <span style="color:#555">Repository:</span> <code>{p['Repository']}</code>
+  &nbsp;|&nbsp; {p['Status']}<br>
+  <span style="color:#555">Detail:</span> {p['Detail']}<br>
+  {"<a href='" + p['URL'] + "' target='_blank' style='color:#3A6BC4'>🔗 " + p['URL'] + "</a>" if p['URL'] else "<em style='color:#888'>URL not resolved</em>"}
+</div>""",
+                unsafe_allow_html=True,
+            )
+
+        st.divider()
+
+        # Tables — Role column always shown
         def _render_table(data):
             display = [{
-                "Dataset": row["Dataset"][:85] + ("…" if len(row["Dataset"]) > 85 else ""),
+                "Role": "⭐ Primary" if row["_is_primary"] else "Secondary",
+                "Dataset": row["Dataset"][:80] + ("…" if len(row["Dataset"]) > 80 else ""),
                 "URL": row["URL"],
                 "Repository": row["Repository"],
                 "Status": row["Status"],
@@ -1272,18 +1329,21 @@ elif uploaded_files and len(uploaded_files) > 0:
             } for row in data]
             st.dataframe(display, use_container_width=True, hide_index=True,
                 column_config={
+                    "Role": st.column_config.TextColumn("Role", width="small"),
                     "URL": st.column_config.LinkColumn("URL", display_text="🔗 Open"),
                     "Status": st.column_config.TextColumn("Status", width="medium"),
+                    "Detail": st.column_config.TextColumn("Detail", width="large"),
                 })
 
+        tab1, tab2 = st.tabs([f"🗂️ All datasets ({len(rows)})", f"✅ Downloadable ({downloadable_count})"])
         with tab1:
-            dl = [r for r in rows if r["Status"].startswith("✅")]
+            _render_table(rows)
+        with tab2:
+            dl = [r for r in rows if r["_status_key"] == "yes"]
             if dl:
                 _render_table(dl)
             else:
                 st.info("No directly downloadable datasets found in this paper.")
-        with tab2:
-            _render_table(rows)
 else:
     st.markdown(
         '<div style="padding:1rem;background:#F0F4FA;border-radius:6px;color:#5F7A9D;font-size:0.85rem;">'
