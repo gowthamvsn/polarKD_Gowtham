@@ -50,3 +50,4 @@ temp_*.pdf
 llm_comparison/
 qa_test_results_*.txt
 test_output.log
+
