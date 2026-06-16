@@ -386,6 +386,7 @@ class ResolvedDataset:
     mention_count: int
     sources: list[str]
     is_primary: bool = False
+    used_in_study: bool = False
 
     def to_dict(self) -> dict:
         return self.__dict__
@@ -411,6 +412,7 @@ def _resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
         mention_count=d.mention_count,
         sources=d.sources,
         is_primary=d.is_primary,
+        used_in_study=d.used_in_study,
     )
 
     # 1. Already has a URL
@@ -446,8 +448,15 @@ def _resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
             **base,
         )
 
-    # 4. PANGAEA search (good for arctic/ocean in-situ data)
-    if d.repository_hint in (None, "pangaea", "unknown"):
+    # 4 & 5. Repository search — ONLY when the paper gave us a concrete anchor:
+    # an accession number, or the LLM saw the repository name in the text
+    # (repository_hint set to "pangaea" or "zenodo").
+    # Name-only LLM extractions (no URL, no DOI, no accession, hint=None) are
+    # NOT searched: a keyword match on a long dataset description will almost
+    # always return the wrong record from a different expedition or year.
+    has_anchor = bool(d.accession) or d.repository_hint in ("pangaea", "zenodo")
+
+    if has_anchor and d.repository_hint in (None, "pangaea", "unknown"):
         info = _search_pangaea(d.canonical_name)
         if info:
             return ResolvedDataset(
@@ -458,8 +467,7 @@ def _resolve_one(d: DeduplicatedDataset) -> ResolvedDataset:
                 **base,
             )
 
-    # 5. Zenodo search
-    if d.repository_hint in (None, "zenodo", "unknown"):
+    if has_anchor and d.repository_hint in (None, "zenodo", "unknown", "zenodo"):
         info = _search_zenodo(d.canonical_name)
         if info:
             return ResolvedDataset(

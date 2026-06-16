@@ -32,6 +32,17 @@ try:
 except Exception:
     _HARVESTER_AVAILABLE = False
 
+try:
+    from downloaders.pangaea import download as _pangaea_dl
+    from downloaders.zenodo import download as _zenodo_dl
+    _DOWNLOADERS_AVAILABLE = True
+except Exception:
+    _pangaea_dl = None
+    _zenodo_dl = None
+    _DOWNLOADERS_AVAILABLE = False
+
+_DOWNLOADS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "downloads"))
+
 # ── Downloadability checker ────────────────────────────────────────────────
 _AUTH_REQUIRED = {
     "nsidc", "nasa_earthdata", "copernicus_cds", "copernicus_marine",
@@ -60,12 +71,12 @@ def _zenodo_id(r):
 def check_downloadable(r):
     """Returns (status_key, label, detail)."""
     if not r.resolved_url:
-        return "none", "❌ No URL", "Dataset not resolved"
+        return "none", "No URL", "Dataset not resolved"
     repo = (r.repository or "").lower()
     if repo in _AUTH_REQUIRED:
-        return "auth", "🔐 Login required", f"Needs account on {repo}"
+        return "auth", "Login required", f"Needs account on {repo}"
     if repo in _LANDING_PAGE_ONLY:
-        return "page", "🌐 Homepage only", "No direct file — manual download"
+        return "page", "Homepage only", "No direct file — manual download"
     if repo == "pangaea" or "pangaea" in (r.resolved_url or "").lower():
         pid = _pangaea_id(r)
         if pid:
@@ -75,10 +86,12 @@ def check_downloadable(r):
                     timeout=5, allow_redirects=True
                 )
                 if resp.status_code == 200:
-                    return "yes", "✅ Downloadable", "PANGAEA tab-separated file"
-                return "collection", "📦 Collection", "Parent record — contains child datasets"
+                    return "yes", "Downloadable", "PANGAEA tab-separated file"
+                if resp.status_code == 503:
+                    return "yes", "Downloadable", "PANGAEA file (server busy — download will retry)"
+                return "collection", "Collection", "Parent record — contains child datasets"
             except Exception:
-                return "unknown", "❓ Unknown", "Could not reach PANGAEA"
+                return "unknown", "Unknown", "Could not reach PANGAEA"
     if repo == "zenodo" or "zenodo" in (r.resolved_url or "").lower():
         zid = _zenodo_id(r)
         if zid:
@@ -88,11 +101,29 @@ def check_downloadable(r):
                     files = resp.json().get("files", [])
                     csv_files = [f for f in files if os.path.splitext(f.get("key","").lower())[1] in _CSV_EXTS]
                     if csv_files:
-                        return "yes", "✅ Downloadable", f"Zenodo: {len(csv_files)} CSV/text file(s)"
-                    return "no_csv", "❌ No CSV files", "Zenodo record has no CSV/text files"
+                        return "yes", "Downloadable", f"Zenodo: {len(csv_files)} CSV/text file(s)"
+                    return "no_csv", "No CSV files", "Zenodo record has no CSV/text files"
             except Exception:
-                return "unknown", "❓ Unknown", "Could not reach Zenodo"
-    return "page", "🌐 Homepage only", "Landing page — no direct file"
+                return "unknown", "Unknown", "Could not reach Zenodo"
+    return "page", "Homepage only", "Landing page — no direct file"
+
+def _do_download(row: dict) -> list[str]:
+    """Download a primary/active dataset to _DOWNLOADS_ROOT. Returns list of local file paths."""
+    url = row.get("URL", "")
+    doi = row.get("_doi") or ""
+    accession = row.get("_accession") or ""
+    repo = (row.get("Repository") or "").lower()
+
+    os.makedirs(_DOWNLOADS_ROOT, exist_ok=True)
+
+    if (repo == "pangaea" or "pangaea" in url.lower() or "pangaea" in doi.lower()
+            or "pangaea" in accession.lower()) and _pangaea_dl:
+        return _pangaea_dl(url=url or None, doi=doi or None,
+                           accession=accession or None, dest_root=_DOWNLOADS_ROOT)
+    if (repo == "zenodo" or "zenodo" in url.lower() or "zenodo" in doi.lower()) and _zenodo_dl:
+        return _zenodo_dl(url=url or None, doi=doi or None, dest_root=_DOWNLOADS_ROOT)
+    raise ValueError(f"No downloader available for repository '{repo}' — URL: {url}")
+
 
 # Page config
 st.set_page_config(
@@ -959,7 +990,7 @@ with col1:
     )
 
     if uploaded_files is not None and len(uploaded_files) > 0:
-        st.success(f"✓ {len(uploaded_files)} file(s) ready")
+        st.success(f"{len(uploaded_files)} file(s) ready")
         for i, file in enumerate(uploaded_files, 1):
             st.markdown(f'<div class="doc-item">{i}. {file.name} &nbsp;·&nbsp; {file.size // 1024} KB</div>', unsafe_allow_html=True)
     else:
@@ -969,7 +1000,7 @@ with col2:
     st.markdown('<span class="section-label">Configuration</span>', unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="polar-info-row">📚 <strong>Send to Q&amp;A</strong> — Prepare documents for retrieval-based question answering</div>'
+        '<div class="polar-info-row"><strong>Send to Q&amp;A</strong> — Prepare documents for retrieval-based question answering</div>'
         '<div class="polar-info-row">&#9711; <strong>Generate Knowledge Graph</strong> — Extract variables &amp; build a semantic graph</div>',
         unsafe_allow_html=True
     )
@@ -991,7 +1022,7 @@ with col2:
         st.session_state.show_kg_dialog = False
 
     # ── Q&A Button
-    if st.button("📚 Send to Q&A", use_container_width=True, key="send_qa"):
+    if st.button("Send to Q&A", use_container_width=True, key="send_qa"):
         if uploaded_files and len(uploaded_files) > 0:
             st.session_state.show_qa_dialog = True
             st.session_state.show_kg_dialog = False
@@ -1012,7 +1043,7 @@ with col2:
             )
             col_confirm, col_cancel = st.columns(2)
             with col_confirm:
-                if st.button("✓ Confirm", use_container_width=True, key="qa_confirm"):
+                if st.button("Confirm", use_container_width=True, key="qa_confirm"):
                     st.session_state.show_qa_dialog = False
                     qa_system.set_model(qa_model)
                     st.info(f"Model: **{qa_model}**")
@@ -1030,11 +1061,11 @@ with col2:
                                 if os.path.exists(temp_path):
                                     os.remove(temp_path)
                         if added_count > 0:
-                            st.success(f"✓ {added_count} file(s) indexed.")
+                            st.success(f"{added_count} file(s) indexed.")
                         else:
                             st.info("Files already indexed.")
             with col_cancel:
-                if st.button("✕ Cancel", use_container_width=True, key="qa_cancel"):
+                if st.button("Cancel", use_container_width=True, key="qa_cancel"):
                     st.session_state.show_qa_dialog = False
                     st.rerun()
 
@@ -1065,13 +1096,13 @@ with col2:
             )
             col_confirm, col_cancel = st.columns(2)
             with col_confirm:
-                if st.button("✓ Confirm", use_container_width=True, key="kg_confirm"):
+                if st.button("Confirm", use_container_width=True, key="kg_confirm"):
                     st.session_state.show_kg_dialog = False
                     st.session_state.kg_model_selected = kg_model
                     st.session_state.kg_graph_type_selected = kg_graph_type
                     st.rerun()
             with col_cancel:
-                if st.button("✕ Cancel", use_container_width=True, key="kg_cancel"):
+                if st.button("Cancel", use_container_width=True, key="kg_cancel"):
                     st.session_state.show_kg_dialog = False
                     st.rerun()
 
@@ -1155,7 +1186,7 @@ with col2:
 
         progress_text.empty()
         progress_bar.empty()
-        st.success(f"✓ Knowledge graphs generated for {total_files} file(s).")
+        st.success(f"Knowledge graphs generated for {total_files} file(s).")
         st.info("Tip — use 'Send to Q&A' to also enable document question answering.")
 
         if filter_variables:
@@ -1218,16 +1249,16 @@ elif uploaded_files and len(uploaded_files) > 0:
                     out.write(f.read())
                 pdf_paths.append(p)
 
-            with st.status("🔍 Extracting dataset references…", expanded=True) as s1:
+            with st.status("Extracting dataset references...", expanded=True) as s1:
                 _t1 = _time.time()
                 refs_by_source = extract_from_pdfs(pdf_paths, use_llm=True)
                 raw_count = sum(len(v) for v in refs_by_source.values())
-                s1.update(label=f"✅ {raw_count} raw references extracted ({_time.time()-_t1:.1f}s)", state="complete", expanded=False)
+                s1.update(label=f"{raw_count} raw references extracted ({_time.time()-_t1:.1f}s)", state="complete", expanded=False)
 
-            with st.status("🔗 Deduplicating…", expanded=True) as s2:
+            with st.status("Deduplicating...", expanded=True) as s2:
                 _t2 = _time.time()
                 datasets = deduplicate(refs_by_source)
-                s2.update(label=f"✅ {raw_count} raw → {len(datasets)} unique datasets ({_time.time()-_t2:.1f}s)", state="complete", expanded=False)
+                s2.update(label=f"{raw_count} raw → {len(datasets)} unique datasets ({_time.time()-_t2:.1f}s)", state="complete", expanded=False)
 
         # Steps 3+4: resolve + check in parallel (no files needed)
         def _resolve_and_check(d):
@@ -1236,7 +1267,7 @@ elif uploaded_files and len(uploaded_files) > 0:
             return r, sk, lbl, det
 
         rows = [None] * len(datasets)
-        with st.status(f"🌐 Resolving & checking {len(datasets)} datasets…", expanded=True) as s34:
+        with st.status(f"Resolving & checking {len(datasets)} datasets...", expanded=True) as s34:
             _prog = st.progress(0, text="Starting…")
             _done = 0
             with ThreadPoolExecutor(max_workers=10) as _pool:
@@ -1254,7 +1285,7 @@ elif uploaded_files and len(uploaded_files) > 0:
                             mention_count=_d.mention_count, sources=_d.sources,
                             is_primary=_d.is_primary,
                         )
-                        _sk, _lbl, _det = "unknown", "❓ Error", str(_exc)
+                        _sk, _lbl, _det = "unknown", "Error", str(_exc)
                     rows[_idx] = {
                         "Dataset": _r.canonical_name,
                         "URL": _r.resolved_url or "",
@@ -1264,19 +1295,21 @@ elif uploaded_files and len(uploaded_files) > 0:
                         "_status_key": _sk,
                         "_is_primary": _r.is_primary,
                         "_mention_count": _r.mention_count,
+                        "_doi": _r.doi or "",
+                        "_accession": _r.accession or "",
                     }
                     _done += 1
                     _prog.progress(_done / len(datasets), text=f"{_done}/{len(datasets)} processed")
             _resolved_count = sum(1 for row in rows if row["URL"])
             _dl_count = sum(1 for row in rows if row["_status_key"] == "yes")
-            s34.update(label=f"✅ {_resolved_count} resolved · {_dl_count} downloadable ({_time.time()-_t0:.1f}s total)", state="complete", expanded=False)
+            s34.update(label=f"{_resolved_count} resolved · {_dl_count} downloadable ({_time.time()-_t0:.1f}s total)", state="complete", expanded=False)
 
         st.session_state.harvester_results = rows
         st.session_state.harvester_elapsed = _time.time() - _t0
 
     rows = st.session_state.harvester_results
     if rows:
-        # Heuristic fallback: if LLM didn't pick a primary, use highest mention count
+        # Heuristic fallback: if LLM didn't mark any primary, use highest mention count
         if not any(r["_is_primary"] for r in rows):
             best = max(rows, key=lambda r: r["_mention_count"])
             best["_is_primary"] = True
@@ -1286,64 +1319,95 @@ elif uploaded_files and len(uploaded_files) > 0:
                 r["_primary_how"] = "llm" if r["_is_primary"] else ""
 
         primary_rows = [r for r in rows if r["_is_primary"]]
-        downloadable_count = sum(1 for r in rows if r["_status_key"] == "yes")
+        secondary_rows = [r for r in rows if not r["_is_primary"]]
         elapsed = st.session_state.get("harvester_elapsed")
 
         # Metrics
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Datasets found", len(rows))
-        c2.metric("Primary dataset", len(primary_rows))
-        c3.metric("Secondary datasets", len(rows) - len(primary_rows))
-        c4.metric("Ready to download", downloadable_count)
+        c1.metric("Total datasets found", len(rows))
+        c2.metric("Active dataset(s)", len(primary_rows))
+        c3.metric("Secondary references", len(secondary_rows))
+        c4.metric("Directly downloadable", sum(1 for r in primary_rows if r["_status_key"] == "yes"))
         c5.metric("Time taken", f"{elapsed:.1f}s" if elapsed else "—")
 
         st.divider()
 
-        # Primary dataset card
-        st.markdown("#### ⭐ Primary Dataset")
-        for p in primary_rows:
-            badge = " <span style='font-size:0.75rem;color:#8899AA'>(identified by mention frequency)</span>" if p["_primary_how"] == "heuristic" else ""
-            st.markdown(
-                f"""<div style="border:2px solid #3A6BC4;border-radius:8px;padding:0.9rem 1.2rem;
-                            background:#EEF3FB;margin-bottom:0.6rem;">
-  <strong style="font-size:1rem">{p['Dataset']}</strong>{badge}<br>
-  <span style="color:#555">Repository:</span> <code>{p['Repository']}</code>
-  &nbsp;|&nbsp; {p['Status']}<br>
-  <span style="color:#555">Detail:</span> {p['Detail']}<br>
-  {"<a href='" + p['URL'] + "' target='_blank' style='color:#3A6BC4'>🔗 " + p['URL'] + "</a>" if p['URL'] else "<em style='color:#888'>URL not resolved</em>"}
+        # ── ACTIVE DATASETS ────────────────────────────────────────────────
+        st.markdown("### Active Dataset(s)")
+        st.caption("The dataset(s) this paper introduces, collects, or primarily analyses — these are the ones you want to download.")
+
+        if "dl_results" not in st.session_state:
+            st.session_state.dl_results = {}
+
+        for i, p in enumerate(primary_rows):
+            heuristic_note = (" *(identified by mention frequency — LLM did not mark a primary)*"
+                              if p["_primary_how"] == "heuristic" else "")
+            can_dl = p["_status_key"] == "yes" and _DOWNLOADERS_AVAILABLE
+
+            with st.container():
+                st.markdown(
+                    f"""<div style="border:2px solid #2E5FA0;border-radius:8px;padding:1rem 1.4rem;
+                                background:#EEF3FB;margin-bottom:0.5rem;">
+  <strong style="font-size:1.05rem;color:#0D2347">{p['Dataset']}</strong>{heuristic_note}<br>
+  <span style="color:#555;font-size:0.85rem">Repository:</span> <code>{p['Repository']}</code>
+  &emsp;{p['Status']}<br>
+  <span style="color:#555;font-size:0.85rem">Detail:</span> <span style="font-size:0.85rem">{p['Detail']}</span><br>
+  {"<a href='" + p['URL'] + "' target='_blank' style='color:#2E5FA0;font-size:0.85rem'>" + p['URL'][:90] + ("…" if len(p['URL']) > 90 else "") + "</a>" if p['URL'] else "<em style='color:#888;font-size:0.85rem'>URL not resolved</em>"}
 </div>""",
-                unsafe_allow_html=True,
-            )
+                    unsafe_allow_html=True,
+                )
+
+                result_key = f"dlresult_{i}_{p['Dataset'][:30]}"
+                if can_dl:
+                    if st.button("Download to disk", key=f"dl_btn_{i}"):
+                        with st.status("Downloading…", expanded=True) as _dl_status:
+                            try:
+                                files = _do_download(p)
+                                st.session_state.dl_results[result_key] = ("ok", files)
+                                _dl_status.update(
+                                    label=f"Downloaded {len(files)} file(s)",
+                                    state="complete", expanded=False
+                                )
+                            except Exception as _dl_err:
+                                st.session_state.dl_results[result_key] = ("err", str(_dl_err))
+                                _dl_status.update(
+                                    label=f"Download failed: {_dl_err}",
+                                    state="error", expanded=False
+                                )
+                elif p["_status_key"] == "auth":
+                    st.info(f"Requires account on {p['Repository']} — {p['Detail']}. Visit the link above to access.")
+                elif p["_status_key"] in ("page", "none"):
+                    st.info("No direct file available — use the link above to access the data manually.")
+
+                if result_key in st.session_state.dl_results:
+                    ok, data = st.session_state.dl_results[result_key]
+                    if ok == "ok":
+                        st.success(f"{len(data)} file(s) saved to disk:")
+                        for fpath in data:
+                            st.code(fpath)
+                    else:
+                        st.error(f"Download failed: {data}")
 
         st.divider()
 
-        # Tables — Role column always shown
-        def _render_table(data):
-            display = [{
-                "Role": "⭐ Primary" if row["_is_primary"] else "Secondary",
-                "Dataset": row["Dataset"][:80] + ("…" if len(row["Dataset"]) > 80 else ""),
-                "URL": row["URL"],
-                "Repository": row["Repository"],
-                "Status": row["Status"],
-                "Detail": row["Detail"],
-            } for row in data]
-            st.dataframe(display, use_container_width=True, hide_index=True,
-                column_config={
-                    "Role": st.column_config.TextColumn("Role", width="small"),
-                    "URL": st.column_config.LinkColumn("URL", display_text="🔗 Open"),
-                    "Status": st.column_config.TextColumn("Status", width="medium"),
-                    "Detail": st.column_config.TextColumn("Detail", width="large"),
-                })
+        # ── SECONDARY REFERENCES ───────────────────────────────────────────
+        st.markdown("### Secondary References")
+        st.caption("Other datasets cited in this paper (forcing data, reanalysis products, validation sources). Links provided for manual access.")
 
-        tab1, tab2 = st.tabs([f"🗂️ All datasets ({len(rows)})", f"✅ Downloadable ({downloadable_count})"])
-        with tab1:
-            _render_table(rows)
-        with tab2:
-            dl = [r for r in rows if r["_status_key"] == "yes"]
-            if dl:
-                _render_table(dl)
-            else:
-                st.info("No directly downloadable datasets found in this paper.")
+        if secondary_rows:
+            sec_display = [{
+                "Dataset": r["Dataset"][:80] + ("…" if len(r["Dataset"]) > 80 else ""),
+                "Repository": r["Repository"],
+                "Status": r["Status"],
+                "URL": r["URL"],
+            } for r in secondary_rows]
+            st.dataframe(sec_display, use_container_width=True, hide_index=True,
+                column_config={
+                    "URL": st.column_config.LinkColumn("URL", display_text="Open"),
+                    "Status": st.column_config.TextColumn("Status", width="medium"),
+                })
+        else:
+            st.info("No secondary references identified.")
 else:
     st.markdown(
         '<div style="padding:1rem;background:#F0F4FA;border-radius:6px;color:#5F7A9D;font-size:0.85rem;">'
@@ -1359,7 +1423,7 @@ st.markdown('<span class="section-label">Step 02</span>', unsafe_allow_html=True
 st.markdown('<div class="section-heading">Document <em>Q&A</em></div>', unsafe_allow_html=True)
 
 if qa_system.list_documents():
-    st.success(f"✓ Q&A System Ready — {len(qa_system.list_documents())} document(s) indexed")
+    st.success(f"Q&A System Ready — {len(qa_system.list_documents())} document(s) indexed")
     col_r1, col_r2 = st.columns(2)
     with col_r1:
         if st.button("Clear Chat History", use_container_width=True, key="clear_chat"):

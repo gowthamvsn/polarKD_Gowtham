@@ -110,6 +110,7 @@ class DeduplicatedDataset:
     sources: list[str] = field(default_factory=list)
     raw_refs: list[DatasetRef] = field(default_factory=list)
     is_primary: bool = False
+    used_in_study: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -121,6 +122,7 @@ class DeduplicatedDataset:
             "mention_count": self.mention_count,
             "sources": self.sources,
             "is_primary": self.is_primary,
+            "used_in_study": self.used_in_study,
         }
 
 
@@ -137,9 +139,11 @@ def _merge_into(existing: DeduplicatedDataset, ref: DatasetRef, source: str):
         existing.accession = ref.accession
     if not existing.repository_hint and ref.repository_hint:
         existing.repository_hint = ref.repository_hint
-    # Any mention marked primary promotes the whole group
+    # Any mention marked primary or used_in_study promotes the whole group
     if ref.is_primary:
         existing.is_primary = True
+    if ref.used_in_study:
+        existing.used_in_study = True
     # Prefer shorter canonical name (less verbose)
     if len(ref.name) < len(existing.canonical_name):
         existing.canonical_name = ref.name
@@ -196,6 +200,7 @@ def deduplicate(refs_by_source: dict[str, list[DatasetRef]]) -> list[Deduplicate
                     sources=[source] if source else [],
                     raw_refs=[ref],
                     is_primary=ref.is_primary,
+                    used_in_study=ref.used_in_study,
                 )
                 idx = len(deduped)
                 deduped.append(d)

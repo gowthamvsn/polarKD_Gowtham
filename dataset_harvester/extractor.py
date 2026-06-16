@@ -31,6 +31,7 @@ class DatasetRef:
     raw_citation: str = ""             # Original text snippet that mentioned it
     source: str = ""                   # "regex" | "llm"
     is_primary: bool = False           # True for the paper's one central/introduced dataset
+    used_in_study: bool = False        # True if the text indicates this dataset was actually used in the paper
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -42,13 +43,13 @@ class DatasetRef:
 
 # Standard HTTP/HTTPS URLs (not purely paper/journal URLs)
 _URL_RE = re.compile(
-    r'https?://[^\s\)\],\'"<>]{10,}',
+    r'https?://[^\s\)\(\],\'"<>]{10,}',
     re.IGNORECASE
 )
 
 # Data DOIs — 10.XXXX/... format, skipping common journal publishers
 _DOI_RE = re.compile(
-    r'\b(10\.\d{4,9}/[^\s\)\],\'"<>]+)',
+    r'\b(10\.\d{4,9}/[^\s\)\(\],\'"<>]+)',
     re.IGNORECASE
 )
 
@@ -88,12 +89,12 @@ _KNOWN_DATASETS = [
     "MOSAiC",
     "SHEBA",
     "IABP",
-    "AWI", "IMB",
+    "IMB",
     # Climate model intercomparison
     "CMIP3", "CMIP5", "CMIP6",
     # Ocean/atmosphere models frequently cited as data sources
     "HYCOM", "FESOM", "NEMO", "ROMS",
-    "WRF", "ECMWF",
+    "WRF",
     # Ocean reanalysis / products
     "GLORYS", "GLORYS12", "OSTIA",
     # Sea-ice satellite products
@@ -117,7 +118,15 @@ _JOURNAL_DOI_PREFIXES = {
     "10.5194", "10.1073", "10.3189", "10.1098", "10.1007",
     "10.1177", "10.1093", "10.1111", "10.2307", "10.1146",
     "10.1214", "10.1137", "10.1257", "10.1353", "10.2307",
-    "10.1515", "10.1515", "10.1017", "10.1017",
+    "10.1515", "10.1017",
+    "10.1525",  # UC Press / Elementa journal
+    "10.13039", # CrossRef Funder Registry
+    "10.17815", # JLSRF journal
+    "10.2312",  # AWI Berichte (reports/publications)
+    "10.5670",  # Oceanography (The Oceanography Society)
+    "10.1109",  # IEEE (Transactions, TGRS, JSTARS, etc.)
+    "10.3389",  # Frontiers journals
+    "10.1088",  # IOP Publishing
 }
 
 # DOI prefixes that are definitely data repositories — always keep these
@@ -134,8 +143,16 @@ _DATA_REPO_DOI_PREFIXES = {
     "10.17882", # SEANOE (alt prefix)
     "10.3334",  # ORNL DAAC
     "10.5285",  # BODC (British Oceanographic Data Centre)
-    "10.1525",  # UC DataDryad
     "10.5441",  # PANGAEA (alt prefix)
+    "10.5884",  # Polar Data Catalogue (Canada)
+    "10.26071", # OGSL / St. Lawrence Global Observatory
+    "10.17616", # re3data (data repository registry)
+    "10.48670", # CMEMS (Copernicus Marine)
+    "10.24381", # Copernicus Climate Data Store
+    "10.5439",  # ARM (Atmospheric Radiation Measurement) facility
+    "10.25923", # NOAA NCEI (alternate prefix)
+    "10.22008", # GEUS / Arctic Greenland data portals
+    "10.7265",  # NSIDC (alternate dataset DOI prefix)
 }
 
 # URLs from sites that are never data repositories
@@ -159,10 +176,16 @@ def _is_data_doi(doi: str) -> bool:
 
 def _is_journal_url(url: str) -> bool:
     try:
-        # Extract domain from URL
         domain = url.split("//", 1)[1].split("/")[0].lower()
         domain = domain.lstrip("www.")
-        return domain in _JOURNAL_URL_DOMAINS
+        if domain in _JOURNAL_URL_DOMAINS:
+            return True
+        # doi.org resolver pointing at a journal article — treat as journal URL
+        if domain == "doi.org":
+            m = re.search(r'doi\.org/(10\.\d{4,9})', url, re.IGNORECASE)
+            if m and m.group(1).lower() in _JOURNAL_DOI_PREFIXES:
+                return True
+        return False
     except Exception:
         return False
 
@@ -170,6 +193,15 @@ def _is_journal_url(url: str) -> bool:
 def _is_truncated(s: str) -> bool:
     """True if a URL/DOI was cut off mid-word by a line break."""
     return s.endswith(("-", "/", ".", "_", "="))
+
+
+def _join_broken_urls(text: str) -> str:
+    """Join URLs split across lines by PDF word-wrap: 'https://example.\ncom/path'."""
+    return re.sub(
+        r'(https?://[^\s\n]+[./\-_=])\n[ \t]*([a-zA-Z0-9][^\s\n]*)',
+        r'\1\2',
+        text,
+    )
 
 
 def _repo_hint_from_url(url: str) -> Optional[str]:
@@ -196,6 +228,18 @@ def _repo_hint_from_url(url: str) -> Optional[str]:
     if "usgs.gov" in u and "data" in u: return "usgs"
     if "ncdc.noaa" in u:             return "noaa_ncei"
     if "gfz-potsdam.de" in u:        return "gfz"
+    if "polardata.ca" in u:          return "polar_data_catalogue"
+    if "ogsl.ca" in u or "slgo.ca" in u: return "ogsl"
+    # doi.org resolver: check if the embedded DOI belongs to a known data prefix
+    if "doi.org" in u:
+        m = re.search(r'doi\.org/(10\.\d{4,9})', u)
+        if m:
+            prefix = m.group(1).lower()
+            if prefix in ("10.1594", "10.5441"): return "pangaea"
+            if prefix == "10.5281":              return "zenodo"
+            if prefix == "10.18739":             return "arctic_data_center"
+            if prefix in ("10.5067",):           return "nasa_earthdata"
+            if prefix in _DATA_REPO_DOI_PREFIXES: return "data_repository"
     return None
 
 
@@ -204,9 +248,79 @@ _DATA_CONTEXT_RE = re.compile(
     r'(?:available\s+(?:at|from|via|through|online\s+at)|'
     r'downloaded?\s+from|obtained?\s+from|accessed?\s+(?:at|from|via|through)|'
     r'retrieved?\s+from|deposit(?:ed)?\s+(?:at|in|to)|archived?\s+(?:at|in)|'
-    r'data\s+(?:are\s+)?(?:available|accessible|hosted)\s+(?:at|from|via))',
+    r'data\s+(?:are\s+)?(?:available|accessible|hosted)\s+(?:at|from|via)|'
+    # Merged forms produced by two-column PDF text extraction (no spaces between words)
+    r'availableat|availableon|availablefrom|depositedat|areavailableat|areavailableon)',
     re.IGNORECASE
 )
+
+_USE_CONTEXT_RE = re.compile(
+    r'\b(?:we\s+(?:use|used|utilize|utilised)|this\s+(?:study|paper)\s+(?:uses|used)|'
+    r'data\s+(?:were|was)\s+(?:obtained|downloaded|retrieved|accessed)|available\s+(?:at|from|via)|'
+    r'downloaded?\s+from|retrieved?\s+from|accessed?\s+(?:at|from|via)|'
+    r'collected\s+by|deposited\s+at|provided\s+by|released\s+by|generated\s+by)\b|'
+    # Merged forms from two-column PDF extraction
+    r'(?:alldataareavailab|dataareavailab|availableat|availableon|availablefrom|depositedat)',
+    re.IGNORECASE
+)
+
+_SECTION_HEADING_RE = re.compile(
+    r'(?m)^[ \t]*'
+    r'(?:'
+    # 1. Numbered heading: "4 Data availability", "3.1 Methods", "2 Data and methods"
+    #    Section number + horizontal space (not newline) + short content with data/method.
+    r'\d[\d\.]*\.?[ \t]+(?=[^\n]{1,60}[ \t]*$)[^\n]*\b(?:data|method)\b[^\n]*'
+    r'|'
+    # 2. Star/bullet heading: "* Data availability", "• Data Access"
+    r'[*•\-][ \t]+(?=[^\n]{1,60}[ \t]*$)[^\n]*\b(?:data|method)\b[^\n]*'
+    r'|'
+    # 3. Unnumbered heading starting WITH "Data"/"Method": ≤ 40 chars, 2+ words.
+    #    Requires at least one more word after "data"/"method" (so bare "data" or
+    #    "dataset" alone on a line does not match — those are sentence fragments).
+    #    Verb exclusion (are/were/is/was) blocks body sentences like "data are...".
+    #    Covers: "Data availability", "DATA AVAILABILITY", "Methods", "Data Access"
+    r'(?=[^\n]{6,40}[ \t]*$)(?:data|method)\b(?!\s+(?:are|were|is|was|have|has|had)\b)\s+\S[^\n]*'
+    r'|'
+    # 4. Merged-word artefact from two-column PDF encoding (no spaces between words).
+    #    pdfplumber returns "Dataavailability", "Datacollected", "Dataoverview" as one token.
+    #    Minimum 4 letters after "data" to exclude the common word "dataset" (3 letters).
+    #    Optional number/bullet prefix: "4 Dataavailability", "* Datacollected"
+    r'(?:\d[\d\.]*\.?[ \t]+|[*•\-][ \t]+)?data[A-Za-z]{5,}'
+    r')[ \t]*$',
+    re.IGNORECASE
+)
+_SECTION_END_RE = re.compile(
+    r'(?m)^(?:\d+\.?\s*)?(References|Bibliography|Acknowledgements|Acknowledgments|Supplementary|Appendix|Funding)\b',
+    re.IGNORECASE
+)
+
+def _section_ranges(text: str) -> list[tuple[int, int]]:
+    starts = sorted(m.start() for m in _SECTION_HEADING_RE.finditer(text))
+    hard_ends = sorted(m.start() for m in _SECTION_END_RE.finditer(text))
+    # Drop any section heading that starts after the first hard end marker
+    # (catches citation years like "1958" or dataset names in the reference list).
+    if hard_ends:
+        starts = [s for s in starts if s < hard_ends[0]]
+    # Each section ends at the next section heading OR a hard end (References/etc.),
+    # whichever comes first — prevents one section from swallowing the entire paper.
+    all_ends = sorted(starts[1:] + hard_ends)
+    ranges: list[tuple[int, int]] = []
+    for start in starts:
+        end = next((e for e in all_ends if e > start), len(text))
+        ranges.append((start, end))
+    return ranges
+
+
+def _is_in_section(idx: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start <= idx < end for start, end in ranges)
+
+
+def _has_use_context(text: str, start: int, end: int,
+                     data_ranges: list[tuple[int, int]]) -> bool:
+    if _is_in_section(start, data_ranges):
+        return True
+    window = text[max(0, start - 180): min(len(text), end + 180)]
+    return bool(_USE_CONTEXT_RE.search(window))
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +328,10 @@ _DATA_CONTEXT_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 def extract_regex(text: str) -> list[DatasetRef]:
+    text = _join_broken_urls(text)
     refs: list[DatasetRef] = []
-    seen_identifiers: set[str] = set()
+    seen_identifiers: dict[str, int] = {}  # key → index in refs
+    data_ranges = _section_ranges(text)
 
     # Per-pattern counters for the terminal report
     _c = {
@@ -227,8 +343,10 @@ def extract_regex(text: str) -> list[DatasetRef]:
 
     def _add(ref: DatasetRef, key: str):
         if key not in seen_identifiers:
-            seen_identifiers.add(key)
+            seen_identifiers[key] = len(refs)
             refs.append(ref)
+        elif ref.used_in_study and not refs[seen_identifiers[key]].used_in_study:
+            refs[seen_identifiers[key]].used_in_study = True
 
     # URLs — only data repository URLs
     for m in _URL_RE.finditer(text):
@@ -251,8 +369,11 @@ def extract_regex(text: str) -> list[DatasetRef]:
                 continue
         _c["url_kept"] += 1
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
-        _add(DatasetRef(name=url, url=url, repository_hint=hint,
-                        raw_citation=ctx, source="regex"), url)
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=url, url=url, repository_hint=hint,
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), url)
 
     # DOIs — only data DOIs
     for m in _DOI_RE.finditer(text):
@@ -272,42 +393,57 @@ def extract_regex(text: str) -> list[DatasetRef]:
             hint = "pangaea"
         elif "5281/zenodo" in doi.lower():
             hint = "zenodo"
-        _add(DatasetRef(name=doi, doi=doi, repository_hint=hint,
-                        raw_citation=ctx, source="regex"), doi.lower())
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=doi, doi=doi, repository_hint=hint,
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), doi.lower())
 
     # PANGAEA accessions
     for m in _PANGAEA_RE.finditer(text):
         _c["pangaea"] += 1
         acc = f"PANGAEA.{m.group(1)}"
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
-        _add(DatasetRef(name=acc, accession=acc, repository_hint="pangaea",
-                        raw_citation=ctx, source="regex"), acc)
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=acc, accession=acc, repository_hint="pangaea",
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), acc)
 
     # Zenodo records
     for m in _ZENODO_RE.finditer(text):
         _c["zenodo"] += 1
         acc = f"zenodo.{m.group(1)}"
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
-        _add(DatasetRef(name=acc, accession=acc,
-                        url=f"https://zenodo.org/record/{m.group(1)}",
-                        repository_hint="zenodo",
-                        raw_citation=ctx, source="regex"), acc)
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=acc, accession=acc,
+            url=f"https://zenodo.org/record/{m.group(1)}",
+            repository_hint="zenodo",
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), acc)
 
     # NSIDC accessions
     for m in _NSIDC_RE.finditer(text):
         _c["nsidc"] += 1
         acc = f"NSIDC-{m.group(1).zfill(4)}"
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
-        _add(DatasetRef(name=acc, accession=acc, repository_hint="nsidc",
-                        raw_citation=ctx, source="regex"), acc)
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=acc, accession=acc, repository_hint="nsidc",
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), acc)
 
     # Known named datasets
     for m in _KNOWN_PATTERN.finditer(text):
         _c["known"] += 1
         name = m.group(0)
         ctx = text[max(0, m.start()-100):m.end()+100].replace("\n", " ")
-        _add(DatasetRef(name=name, repository_hint=_hint_for_known(name),
-                        raw_citation=ctx, source="regex"), name.lower())
+        use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        _add(DatasetRef(
+            name=name, repository_hint=_hint_for_known(name),
+            raw_citation=ctx, source="regex", used_in_study=use_in_study
+        ), name.lower())
 
     # ── Terminal report ──────────────────────────────────────────────────────
     W = 60
@@ -333,7 +469,7 @@ def extract_regex(text: str) -> list[DatasetRef]:
 
 def _hint_for_known(name: str) -> Optional[str]:
     n = name.upper()
-    if n.startswith("ERA") or n in {"ECMWF", "CAMSRA"}:
+    if n.startswith("ERA") or n in {"CAMSRA"}:
         return "copernicus_cds"
     if n in {"MODIS", "VIIRS", "LANDSAT", "ICESAT", "ICESAT-2", "GRACE", "GRACE-FO",
              "MERRA-2", "CALIPSO", "CLOUDSAT", "GPM", "IMERG", "TRMM", "SMOS"}:
@@ -536,7 +672,11 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
             print("[extractor] No LLM backend available — skipping LLM pass")
             return []
 
-    all_chunks = _chunk_text(text)
+    # Don't feed the reference list to the LLM — it causes mass over-extraction.
+    hard_end = _SECTION_END_RE.search(text)
+    llm_text = text[:hard_end.start()] if hard_end else text
+
+    all_chunks = _chunk_text(llm_text)
     chunks_with_idx = [(i, c) for i, c in enumerate(all_chunks) if _has_dataset_signals(c)]
     skipped = len(all_chunks) - len(chunks_with_idx)
     n = len(chunks_with_idx)
@@ -587,6 +727,7 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
                     raw_citation=item.get("raw_citation", "")[:300],
                     source="llm",
                     is_primary=is_primary,
+                    used_in_study=is_primary,
                 ))
                 chunk_datasets += 1
             succeeded += 1
@@ -681,15 +822,68 @@ def extract_from_pdfs(pdf_paths: list[str], use_llm: bool = True,
     return results
 
 
+def _words_to_text(words: list) -> str:
+    """Reconstruct text from pdfplumber word dicts, one visual line per output line."""
+    if not words:
+        return ""
+    sorted_w = sorted(words, key=lambda w: (w["top"], w["x0"]))
+    lines: list[str] = []
+    cur_top: Optional[float] = None
+    cur_line: list[dict] = []
+    for w in sorted_w:
+        if cur_top is None or (w["top"] - cur_top) > 5:
+            if cur_line:
+                lines.append(" ".join(x["text"] for x in cur_line))
+            cur_line = [w]
+            cur_top = w["top"]
+        else:
+            cur_line.append(w)
+    if cur_line:
+        lines.append(" ".join(x["text"] for x in cur_line))
+    return "\n".join(lines)
+
+
+def _extract_page_text(page) -> str:
+    """
+    Column-aware page extraction.
+    Splits the page at its horizontal midpoint: full-width elements (page
+    headers/numbers) come first, then the left column top-to-bottom, then
+    the right column top-to-bottom.  This keeps section headings like
+    "Data availability" on their own line regardless of what the right
+    column contains on the same visual row.
+    """
+    words = page.extract_words(x_tolerance=3, y_tolerance=3, keep_blank_chars=False)
+    if not words:
+        return page.extract_text() or ""
+
+    mid = page.width / 2
+    left  = [w for w in words if w["x1"] < mid - 10]
+    right = [w for w in words if w["x0"] > mid + 10]
+    span  = [w for w in words if not (w["x1"] < mid - 10 or w["x0"] > mid + 10)]
+
+    # Two-column: both sides have content and together account for ≥60% of words
+    two_col = (
+        len(left) >= 5
+        and len(right) >= 5
+        and (len(left) + len(right)) >= len(words) * 0.6
+    )
+
+    if two_col:
+        parts = [_words_to_text(span), _words_to_text(left), _words_to_text(right)]
+        return "\n".join(p for p in parts if p)
+    return _words_to_text(words)
+
+
 def _read_pdf(path: str) -> str:
+    """
+    Column-aware PDF text extraction.
+    Two-column pages are extracted with each column processed independently
+    so section headings are never interleaved with unrelated text.
+    """
     try:
         with pdfplumber.open(path) as pdf:
-            pages = []
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    pages.append(t)
-            return "\n".join(pages)
+            pages = [_extract_page_text(p) for p in pdf.pages]
+            return "\n".join(p for p in pages if p)
     except Exception as e:
         print(f"[extractor] PDF read error: {e}")
         return ""
