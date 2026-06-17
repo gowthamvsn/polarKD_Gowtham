@@ -13,7 +13,7 @@ File	Role
 causal_graph.py	Core logic — filtering, LLM extraction, graph generation
 frontend_light_v4.py	UI — buttons, dialogs, Section 4 display
 Execution Flow
-
+`
 1. User uploads PDF(s) → generates KG
    └─ stored in st.session_state.processed_pdfs[file]['relations']
         each edge: {source, relation, target, score}

@@ -51,22 +51,30 @@ def _is_valid_node(text: str) -> bool:
     t = text.strip()
     if not t:
         return False
+
+    # NEW: remove leading articles instead of rejecting useful variable names
+    # Example: "the sea ice extent" -> "sea ice extent"
+    t = re.sub(r'^(the|a|an)\s+', '', t, flags=re.IGNORECASE).strip()
+
     # Reject anything longer than 60 characters
     if len(t) > 60:
         return False
+
     # Reject anything with more than 5 words
     words = t.split()
     if len(words) > 5:
         return False
+
     # Reject if the first word is a known sentence-starter
     if words[0].lower() in _SENTENCE_STARTERS:
         return False
+
     # Reject if node text matches or contains any technical/method term
     t_lower = t.lower()
     if any(term in t_lower for term in _TECH_BLOCKLIST):
         return False
-    return True
 
+    return True
 
 def _clean_node(text: str) -> str:
     return text.strip().lower()
