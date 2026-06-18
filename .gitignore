@@ -70,3 +70,7 @@ logs/
 # Scripts not for repo
 make_ppt.py
 
+# Local notes not for repo
+SETUP_NOTES.md
+readforchanges.md
+
