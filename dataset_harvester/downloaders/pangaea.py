@@ -8,6 +8,7 @@ Data is usually a tab-separated .txt file downloadable directly via:
 
 import os
 import re
+import zipfile
 import requests
 
 from .generic import download_file
@@ -70,4 +71,20 @@ def download(url: str = None, doi: str = None, accession: str = None,
 
     print(f"     Downloading: {filename}")
     path = download_file(download_url, dest_dir, filename)
+
+    # PANGAEA returns application/zip even for ?format=textfile — extract if so
+    with open(path, "rb") as _f:
+        magic = _f.read(2)
+    if magic == b"PK":
+        zip_path = path[:-4] + ".zip" if path.endswith(".txt") else path + ".zip"
+        os.rename(path, zip_path)
+        extracted = []
+        with zipfile.ZipFile(zip_path) as zf:
+            for name in zf.namelist():
+                zf.extract(name, dest_dir)
+                extracted.append(os.path.join(dest_dir, name))
+        os.remove(zip_path)
+        print(f"     Extracted {len(extracted)} file(s) from ZIP")
+        return extracted
+
     return [path]

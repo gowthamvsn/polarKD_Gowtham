@@ -189,15 +189,33 @@ def _fetch_collection_children(pid: str) -> list[dict]:
     return children
 
 
+def _read_pangaea_lines(fpath: str) -> list[str]:
+    """Read a PANGAEA textfile, handling gzip or zip compression transparently."""
+    import gzip as _gzip
+    with open(fpath, "rb") as _fb:
+        magic = _fb.read(4)
+    if magic[:2] == b"PK":
+        # ZIP — read the first text file inside
+        with zipfile.ZipFile(fpath) as _zf:
+            for _name in _zf.namelist():
+                if os.path.splitext(_name)[1].lower() in (".txt", ".tsv", ".tab", ".csv"):
+                    with _zf.open(_name) as _inner:
+                        return _inner.read().decode("utf-8", errors="replace").splitlines(keepends=True)
+        return []
+    if magic[:2] == b"\x1f\x8b":
+        with _gzip.open(fpath, "rt", encoding="utf-8", errors="replace") as _f:
+            return _f.readlines()
+    with open(fpath, encoding="utf-8", errors="replace") as _f:
+        return _f.readlines()
+
+
 def _preview_file(fpath: str, n: int = 10) -> "pd.DataFrame | None":
     """Return the first n rows of a downloaded dataset file as a DataFrame."""
     ext = os.path.splitext(fpath)[1].lower()
     try:
         if ext in (".txt", ".tsv", ".tab"):
-            # PANGAEA textfile has a /* ... */ metadata block before the actual data.
-            # Read lines and skip everything up to and including the closing */
-            with open(fpath, encoding="utf-8", errors="replace") as _f:
-                lines = _f.readlines()
+            lines = _read_pangaea_lines(fpath)
+            # Skip the /* ... */ metadata header block
             start = 0
             in_header = False
             for idx, line in enumerate(lines):
