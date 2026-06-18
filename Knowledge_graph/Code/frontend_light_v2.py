@@ -14,10 +14,12 @@ import sys
 import re
 import base64
 from io import BytesIO
+import io
 import json
 import pandas as pd
 import tempfile
 import requests
+import zipfile
 
 # ── Dataset Harvester imports ──────────────────────────────────────────────
 _harvester_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dataset_harvester"))
@@ -123,6 +125,101 @@ def _do_download(row: dict) -> list[str]:
     if (repo == "zenodo" or "zenodo" in url.lower() or "zenodo" in doi.lower()) and _zenodo_dl:
         return _zenodo_dl(url=url or None, doi=doi or None, dest_root=_DOWNLOADS_ROOT)
     raise ValueError(f"No downloader available for repository '{repo}' — URL: {url}")
+
+
+@st.cache_data(show_spinner=False)
+def _fetch_collection_children(pid: str) -> list[dict]:
+    """List child datasets inside a PANGAEA collection.
+
+    Scrapes the collection HTML page for child PANGAEA IDs, then tries
+    the ZIP central directory as a fallback for filenames.
+    """
+    children = []
+
+    # Attempt 1 — scrape the PANGAEA collection page
+    try:
+        resp = requests.get(
+            f"https://doi.pangaea.de/10.1594/PANGAEA.{pid}",
+            timeout=20,
+            headers={"Accept": "text/html,*/*"},
+            allow_redirects=True,
+        )
+        if resp.status_code == 200:
+            child_ids = sorted(set(re.findall(r'PANGAEA\.(\d+)', resp.text)) - {pid})
+            if child_ids:
+                children = [
+                    {
+                        "name": f"PANGAEA.{cid}",
+                        "id": cid,
+                        "url": f"https://doi.pangaea.de/10.1594/PANGAEA.{cid}",
+                        "downloadable": False,
+                    }
+                    for cid in child_ids
+                ]
+    except Exception:
+        pass
+
+    # Attempt 2 — download collection ZIP and read filenames from central directory
+    if not children:
+        try:
+            zip_url = f"https://doi.pangaea.de/10.1594/PANGAEA.{pid}?format=zip"
+            resp = requests.get(zip_url, timeout=60)
+            resp.raise_for_status()
+            with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+                return [{"name": n, "id": "", "url": "", "downloadable": False} for n in zf.namelist()]
+        except Exception:
+            return []
+
+    # Check downloadability for each child in parallel
+    def _head_check(cid: str) -> bool:
+        try:
+            r = requests.head(
+                f"https://doi.pangaea.de/10.1594/PANGAEA.{cid}?format=textfile",
+                timeout=6, allow_redirects=True,
+            )
+            return r.status_code in (200, 503)
+        except Exception:
+            return False
+
+    with ThreadPoolExecutor(max_workers=10) as _pool:
+        _futs = {_pool.submit(_head_check, c["id"]): i for i, c in enumerate(children)}
+        for _fut in _as_completed(_futs):
+            children[_futs[_fut]]["downloadable"] = _fut.result()
+
+    return children
+
+
+def _preview_file(fpath: str, n: int = 10) -> "pd.DataFrame | None":
+    """Return the first n rows of a downloaded dataset file as a DataFrame."""
+    ext = os.path.splitext(fpath)[1].lower()
+    try:
+        if ext in (".txt", ".tsv", ".tab"):
+            # PANGAEA textfile has a /* ... */ metadata block before the actual data.
+            # Read lines and skip everything up to and including the closing */
+            with open(fpath, encoding="utf-8", errors="replace") as _f:
+                lines = _f.readlines()
+            start = 0
+            in_header = False
+            for idx, line in enumerate(lines):
+                s = line.strip()
+                if s.startswith("/*"):
+                    in_header = True
+                if in_header and s.endswith("*/"):
+                    start = idx + 1
+                    break
+            data_text = "".join(lines[start:])
+            return pd.read_csv(
+                io.StringIO(data_text), sep="\t", nrows=n,
+                on_bad_lines="skip",
+            )
+        if ext == ".csv":
+            return pd.read_csv(
+                fpath, nrows=n,
+                on_bad_lines="skip", encoding="utf-8", encoding_errors="replace",
+            )
+    except Exception:
+        return None
+    return None
 
 
 # Page config
@@ -1358,6 +1455,8 @@ elif uploaded_files and len(uploaded_files) > 0:
                 )
 
                 result_key = f"dlresult_{i}_{p['Dataset'][:30]}"
+                col_res_key = f"col_children_{i}"
+
                 if can_dl:
                     if st.button("Download to disk", key=f"dl_btn_{i}"):
                         with st.status("Downloading…", expanded=True) as _dl_status:
@@ -1374,17 +1473,81 @@ elif uploaded_files and len(uploaded_files) > 0:
                                     label=f"Download failed: {_dl_err}",
                                     state="error", expanded=False
                                 )
+
+                elif p["_status_key"] == "collection":
+                    if st.button("📂 List Child Datasets", key=f"col_btn_{i}"):
+                        _pid_m = re.search(
+                            r'PANGAEA\.(\d+)\b',
+                            " ".join([p.get("URL") or "", p.get("_doi") or "", p.get("_accession") or ""]),
+                            re.IGNORECASE,
+                        )
+                        if _pid_m:
+                            with st.spinner("Fetching child datasets from PANGAEA…"):
+                                st.session_state[col_res_key] = _fetch_collection_children(_pid_m.group(1))
+                        else:
+                            st.session_state[col_res_key] = []
+
                 elif p["_status_key"] == "auth":
                     st.info(f"Requires account on {p['Repository']} — {p['Detail']}. Visit the link above to access.")
                 elif p["_status_key"] in ("page", "none"):
                     st.info("No direct file available — use the link above to access the data manually.")
 
+                # Collection children list
+                if col_res_key in st.session_state:
+                    children = st.session_state[col_res_key]
+                    if children:
+                        st.markdown(f"**{len(children)} dataset(s) in this collection:**")
+                        for j, c in enumerate(children):
+                            _c_dl_key = f"child_dl_{i}_{j}"
+                            _c_res_key = f"child_dl_result_{i}_{j}"
+                            _ccol1, _ccol2 = st.columns([5, 1])
+                            with _ccol1:
+                                if c["url"]:
+                                    st.markdown(f"- [{c['name']}]({c['url']})")
+                                else:
+                                    st.markdown(f"- {c['name']}")
+                            with _ccol2:
+                                if c.get("downloadable") and st.button("⬇ Download", key=_c_dl_key):
+                                    _child_row = {
+                                        "URL": c["url"],
+                                        "_doi": f"10.1594/PANGAEA.{c['id']}",
+                                        "_accession": "",
+                                        "Repository": "pangaea",
+                                    }
+                                    with st.spinner(f"Downloading {c['name']}…"):
+                                        try:
+                                            _child_files = _do_download(_child_row)
+                                            st.session_state[_c_res_key] = ("ok", _child_files)
+                                        except Exception as _ce:
+                                            st.session_state[_c_res_key] = ("err", str(_ce))
+                            if _c_res_key in st.session_state:
+                                _c_ok, _c_data = st.session_state[_c_res_key]
+                                if _c_ok == "ok":
+                                    st.success(f"{len(_c_data)} file(s) saved:")
+                                    for _cfpath in _c_data:
+                                        st.code(_cfpath)
+                                        _cdf = _preview_file(_cfpath)
+                                        if _cdf is not None and not _cdf.empty:
+                                            st.caption(f"First {len(_cdf)} row(s) — {os.path.basename(_cfpath)}")
+                                            st.dataframe(_cdf, use_container_width=True, hide_index=True)
+                                else:
+                                    st.error(f"Download failed: {_c_data}")
+                    else:
+                        st.warning("Could not retrieve child datasets — visit the URL above to browse the collection manually.")
+
+                # Download result + first-10-rows preview
                 if result_key in st.session_state.dl_results:
                     ok, data = st.session_state.dl_results[result_key]
                     if ok == "ok":
                         st.success(f"{len(data)} file(s) saved to disk:")
                         for fpath in data:
                             st.code(fpath)
+                            df_preview = _preview_file(fpath)
+                            if df_preview is not None and not df_preview.empty:
+                                st.caption(
+                                    f"First {len(df_preview)} row(s) — {os.path.basename(fpath)}"
+                                )
+                                st.dataframe(df_preview, use_container_width=True, hide_index=True)
                     else:
                         st.error(f"Download failed: {data}")
 
