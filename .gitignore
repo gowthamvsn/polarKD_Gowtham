@@ -72,5 +72,15 @@ make_ppt.py
 
 # Local notes not for repo
 SETUP_NOTES.md
+setup_notes.md
 readforchanges.md
+readmeforchanges.md
+ITERATION_LOG.md
+iteration_log.md
+KNOWLEDGE_GRAPH_ANALYSIS.md
+knowledge_graph_analysis.md
+PHASE1_INTEGRATION_COMPLETE.md
+phase1_integration_complete.md
+week5_progress.ptx
+*.ptx
 
