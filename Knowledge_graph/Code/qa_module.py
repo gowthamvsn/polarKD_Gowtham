@@ -4,6 +4,15 @@ Implements RAG (Retrieval Augmented Generation) using uploaded PDFs
 """
 
 import os
+import sys
+
+# Force UTF-8 output on Windows (avoids UnicodeEncodeError with emoji in cp1252 consoles)
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
 import ollama
@@ -23,7 +32,7 @@ try:
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
-    print("⚠️ FAISS not available - using fallback similarity search")
+    print("[WARNING] FAISS not available - using fallback similarity search")
 
 class QASystem:
     def __init__(self, model_name="llama3", use_faiss=True, target_chunk_tokens=512, use_hybrid=True, retrieval_mode='hybrid'):
@@ -88,7 +97,7 @@ class QASystem:
             # Initialize FAISS index with cosine similarity
             # Using IndexFlatIP for inner product (we'll normalize vectors for cosine similarity)
             self.faiss_index = faiss.IndexFlatIP(self.embedding_dim)
-            print(f"✅ FAISS index initialized (mode: {self.retrieval_mode})")
+            print(f"[OK] FAISS index initialized (mode: {self.retrieval_mode})")
         
     def extract_text_from_pdf(self, pdf_path: str) -> str:
         """Extract text from PDF file using PyMuPDF"""
@@ -309,8 +318,8 @@ class QASystem:
 
                 # Store chunks with metadata
                 self.chunks[filename] = chunks_to_embed
-                print(f"  → Created {len(chunks_to_embed)} token-aware chunks")
-                print(f"  → Avg tokens/chunk: {np.mean([self.count_tokens(c) for c in chunks_to_embed]):.0f}")
+                print(f"  -> Created {len(chunks_to_embed)} token-aware chunks")
+                print(f"  -> Avg tokens/chunk: {np.mean([self.count_tokens(c) for c in chunks_to_embed]):.0f}")
                 
             else:
                 # Fallback to simple extraction (still using PyMuPDF)
@@ -449,7 +458,7 @@ class QASystem:
         if self.retrieval_mode == 'bm25':
             # BM25-only retrieval
             if not self.bm25_index or len(self.tokenized_corpus) == 0:
-                print("⚠️ BM25 index not available")
+                print("[WARNING] BM25 index not available")
                 return []
 
             print(f"[BM25-ONLY SEARCH] Retrieving top {top_k} chunks")
@@ -857,7 +866,7 @@ Summary:"""
             # Reset FAISS index
             self.faiss_index = faiss.IndexFlatIP(self.embedding_dim)
             self.chunk_metadata = []
-            print("✅ FAISS index cleared")
+            print("[OK] FAISS index cleared")
     
     def reset_and_reload(self):
         """Reset the Q&A system for fresh loading"""
@@ -875,7 +884,7 @@ Summary:"""
                     'documents': self.documents,
                     'chunks': self.chunks
                 }, f)
-            print(f"✅ FAISS index saved to {path}")
+            print(f"[OK] FAISS index saved to {path}")
     
     def load_faiss_index(self, path: str = "faiss_index.pkl"):
         """Load FAISS index and metadata from disk"""
@@ -886,7 +895,7 @@ Summary:"""
                 self.chunk_metadata = data['metadata']
                 self.documents = data['documents']
                 self.chunks = data['chunks']
-            print(f"✅ FAISS index loaded from {path}")
+            print(f"[OK] FAISS index loaded from {path}")
             print(f"   - Total chunks in index: {self.faiss_index.ntotal}")
             print(f"   - Documents: {list(self.documents.keys())}")
             return True
@@ -900,7 +909,7 @@ Summary:"""
             model_name: Name of the Ollama model (e.g., "llama3:latest", "mistral:7b")
         """
         self.llm_model = model_name
-        print(f"✅ Q&A model changed to: {model_name}")
+        print(f"[OK] Q&A model changed to: {model_name}")
 
     def save_faiss_index(self, path: str = "faiss_index.pkl"):
         """Save FAISS index and metadata to disk"""
@@ -913,7 +922,7 @@ Summary:"""
                     'documents': self.documents,
                     'chunks': self.chunks
                 }, f)
-            print(f"✅ FAISS index saved to {path}")
+            print(f"[OK] FAISS index saved to {path}")
     
     def load_faiss_index(self, path: str = "faiss_index.pkl"):
         """Load FAISS index and metadata from disk"""
@@ -924,7 +933,7 @@ Summary:"""
                 self.chunk_metadata = data['metadata']
                 self.documents = data['documents']
                 self.chunks = data['chunks']
-            print(f"✅ FAISS index loaded from {path}")
+            print(f"[OK] FAISS index loaded from {path}")
             print(f"   - Total chunks in index: {self.faiss_index.ntotal}")
             print(f"   - Documents: {list(self.documents.keys())}")
             return True
