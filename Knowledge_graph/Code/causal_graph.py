@@ -176,7 +176,7 @@ Now identify all causal relationships:
 
     try:
         response = ollama.chat(model=model, messages=[{"role": "user", "content": prompt}])
-        content = response['message']['content']
+        content = response.message.content
         # ── Layer 3: post-validate against whitelist + confidence threshold ─
         return _parse_causal_output(content, valid_nodes_lower, min_confidence=0.4)
     except Exception as e:

@@ -1121,7 +1121,16 @@ def process(file_path, k, filter_variables=True, llm_model="mistral", use_gpt4_d
         if (idx + 1) % 10 == 0:
             print(f"  📊 Processed {idx+1}/{len(chunks)} chunks...")
 
-    # Step 3: Score relations
+    # Step 3: Deduplicate relations (case-normalised) before scoring
+    seen_triples: set = set()
+    deduped_relations = []
+    for h, r, t in total_relations:
+        key = (h.lower().strip(), r.upper().strip(), t.lower().strip())
+        if key not in seen_triples:
+            seen_triples.add(key)
+            deduped_relations.append((h, r, t))
+    total_relations = deduped_relations
+
     scored = confidence_scores(total_relations, model)
 
     print("\n\nRelations with Confidence Scores:\n")
@@ -1177,8 +1186,13 @@ def process(file_path, k, filter_variables=True, llm_model="mistral", use_gpt4_d
 
     neo4j_nodes = set()
     neo4j_edges = []
+    seen_neo4j_keys: set = set()
 
     for head, rel, tail, score in top_scored_relations:
+        key = (head.lower().strip(), rel.strip(), tail.lower().strip())
+        if key in seen_neo4j_keys:
+            continue
+        seen_neo4j_keys.add(key)
         neo4j_nodes.add(head)
         neo4j_nodes.add(tail)
         neo4j_edges.append({

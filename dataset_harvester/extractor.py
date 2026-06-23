@@ -127,6 +127,21 @@ _JOURNAL_DOI_PREFIXES = {
     "10.1109",  # IEEE (Transactions, TGRS, JSTARS, etc.)
     "10.3389",  # Frontiers journals
     "10.1088",  # IOP Publishing
+    "10.1371",  # PLOS ONE / PLOS journals
+    "10.7554",  # eLife
+    "10.1128",  # ASM journals (mSystems, etc.)
+    "10.1890",  # Ecological Society of America
+    "10.1002",  # Wiley (already present but adding alias)
+    "10.1139",  # NRC Research Press (Arctic journal)
+    "10.14430", # SCAR / Antarctic Science
+    "10.1657",  # Arctic, Antarctic, and Alpine Research
+    "10.3354",  # Inter-Research (Mar Ecol Prog Ser, etc.)
+    "10.1007",  # Springer (already present)
+    "10.3402",  # Polar Research (Norwegian journal)
+    "10.1080",  # Taylor & Francis
+    "10.1163",  # Brill journals
+    "10.4319",  # Limnology and Oceanography
+    "10.1899",  # Journal of the North American Benthological Society
 }
 
 # DOI prefixes that are definitely data repositories — always keep these
@@ -154,6 +169,69 @@ _DATA_REPO_DOI_PREFIXES = {
     "10.22008", # GEUS / Arctic Greenland data portals
     "10.7265",  # NSIDC (alternate dataset DOI prefix)
 }
+
+# LLM false-positive filter: terms that indicate the name is NOT a dataset
+_NOT_DATASET_TERMS = re.compile(
+    r'\b(?:'
+    # Lab instruments / equipment
+    r'analyzer|analyser|instrument|sensor|detector|spectrometer|chromatograph|'
+    r'centrifuge|incubator|sampler|probe|logger|thermometer|'
+    # Lab consumables / brand names
+    r'Whatman|Millipore|Sigma.Aldrich|Thermo\s*Fisher|Merck|GF/[A-Z]|filter\s+paper|'
+    r'Shimadzu|Agilent|Waters|PerkinElmer|Varian|Bruker|'
+    # Journal/publisher names
+    r'biogeosciences|geophysical research letters|nature climate|science advances|'
+    r'global biogeochemical|journal of geophysical|limnology and oceanography|'
+    r'environmental science|water resources research|geochemistry geophysics|'
+    r'copernicus publications|european geosciences union'
+    r')\b',
+    re.IGNORECASE
+)
+
+# Reject figure/table/supplementary cross-references
+_FIGURE_TABLE_RE = re.compile(
+    r'^\s*(?:Fig\.?|Figure|Table|Tbl\.?|Suppl?\.?|Supplementary|Appendix|Supp\s*Table|Supp\s*Fig)\s*[\dSA-Z]',
+    re.IGNORECASE
+)
+
+# Reject author citation patterns: "Mann et al., 2012" / "Bradlow et al. (2002)"
+_CITATION_RE = re.compile(r'\bet\s+al\.?\b', re.IGNORECASE)
+
+# Reject funding acknowledgement strings
+_FUNDING_RE = re.compile(
+    r'\b(?:NWO|NSF|NSERC|NIH|ERC|DFG|NERC|ARC\b|venigrant|grant\s+#|award\s+#|'
+    r'dutch\s+nwo|permafrost\s+carbon\s+network|great\s+rivers\s+observatory)\b',
+    re.IGNORECASE
+)
+
+_NOT_DATASET_EXACT = {
+    # Bare measurement abbreviations with no context
+    "doc", "dic", "toc", "poc", "tdn", "rdoc", "dom",
+    "measurements", "samples", "data", "results", "analysis",
+    "soil literature", "aquatic literature",
+}
+
+
+def _is_likely_dataset(name: str) -> bool:
+    """Return False if the name looks like lab equipment, a citation, figure ref, or bare measurement."""
+    n = name.strip()
+    if not n or len(n) < 3:
+        return False
+    if n.lower() in _NOT_DATASET_EXACT:
+        return False
+    if _NOT_DATASET_TERMS.search(n):
+        return False
+    if _FIGURE_TABLE_RE.match(n):
+        return False
+    if _CITATION_RE.search(n):
+        return False
+    if _FUNDING_RE.search(n):
+        return False
+    # Reject suspiciously long names (> 250 chars) — usually multi-grant strings
+    if len(n) > 250:
+        return False
+    return True
+
 
 # URLs from sites that are never data repositories
 _JOURNAL_URL_DOMAINS = {
@@ -522,17 +600,81 @@ _OVERLAP = 400
 _OLLAMA_URL = "http://localhost:11434/api/chat"
 _OLLAMA_MODELS = ["mistral:latest", "mistral:7b", "llama3:latest", "qwen2.5:7b", "gemma3:12b"]
 
+
+def _extract_json_array(text: str) -> list:
+    """
+    Robustly extract a JSON array from LLM output.
+    Handles: markdown fences, leading prose, trailing notes, partial wrapping.
+    """
+    # 1. Strip markdown code fences (```json ... ``` or ``` ... ```)
+    text = re.sub(r'```(?:json)?\s*', '', text).strip()
+    text = re.sub(r'```\s*$', '', text).strip()
+
+    # 2. Try direct parse first
+    try:
+        result = json.loads(text)
+        return result if isinstance(result, list) else []
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Extract the outermost [...] block (handles leading/trailing prose)
+    m = re.search(r'\[.*\]', text, re.DOTALL)
+    if m:
+        try:
+            result = json.loads(m.group(0))
+            return result if isinstance(result, list) else []
+        except json.JSONDecodeError:
+            pass
+
+    # 4. Try to find and parse individual {...} objects (handles array without brackets)
+    objects = re.findall(r'\{[^{}]+\}', text, re.DOTALL)
+    parsed = []
+    for obj in objects:
+        try:
+            parsed.append(json.loads(obj))
+        except json.JSONDecodeError:
+            continue
+    if parsed:
+        return parsed
+
+    # 5. Give up — return empty list (logged as JSON-err by caller)
+    raise json.JSONDecodeError("No JSON array found in LLM response", text, 0)
+
 # Signals that a chunk is worth sending to the LLM
 _DATASET_SIGNAL_RE = re.compile(
     r'\b(?:'
+    # Explicit data access language
     r'dataset|data\s+availability|data\s+available|code\s+and\s+data|'
     r'downloaded?\s+from|obtained?\s+from|accessed?\s+(?:at|from)|'
     r'accession|repository|zenodo|pangaea|figshare|dryad|dataverse|osf\.io|'
     r'doi\.org|10\.\d{4}/'
-    r'|ERA5|ERA-Interim|MODIS|CryoSat|Sentinel|ICESat|GRACE|MERRA|CMIP|'
-    r'TOPAZ|PIOMAS|AMSR|HYCOM|FESOM|GLORYS|OSTIA|GPM|IMERG|CALIPSO|'
+    # Known remote sensing / reanalysis products
+    r'|ERA5|ERA-Interim|ERA-40|MODIS|VIIRS|CryoSat|Sentinel|ICESat|GRACE|'
+    r'MERRA|CMIP|TOPAZ|PIOMAS|AMSR|HYCOM|FESOM|GLORYS|OSTIA|GPM|IMERG|'
+    r'CALIPSO|NCEP|JRA-55|CFSR|GISTEMP|HadCRUT|AVHRR|ARGO|MOSAiC|SHEBA|'
+    # General data/observation terms
     r'reanalysis|remote\s+sensing|satellite\s+data|in\s+situ|buoy|CTD|'
-    r'mooring|observat(?:ion|ory)|measurement|field\s+campaign'
+    r'mooring|observat(?:ion|ory)|field\s+campaign|field\s+station|'
+    # Field measurement / sample collection — catches permafrost/lab papers
+    r'samples?\s+(?:were\s+)?collect|water\s+samples?|soil\s+samples?|'
+    r'collected\s+from|sampl(?:ed|ing)\s+(?:at|in|from)|'
+    r'incubat(?:ed|ion)|dissolved\s+organic|stream(?:water)?|'
+    r'permafrost|tundra|peatland|wetland|watershed|catchment|'
+    r'flux\s+(?:tower|data|measurements?)|eddy\s+covariance|'
+    r'ice\s+core|sediment\s+core|water\s+column|depth\s+profile|'
+    r'monitoring\s+(?:station|network|program|data)|long.term\s+(?:data|monitoring)|'
+    # Climate modeling / ocean science papers
+    r'RCP\s*\d|SSP\s*\d|climate\s+(?:model|projection|scenario)|'
+    r'GCM|AOGCM|earth\s+system\s+model|coupled\s+model|'
+    r'model\s+(?:output|simulation|experiment|run)|'
+    r'observational\s+(?:data|record|constraint)|'
+    r'sea\s+surface\s+temperature|ocean\s+(?:heat|carbon|storage)|'
+    r'carbon\s+(?:uptake|flux|storage|sink|cycle)|'
+    r'dissolved\s+inorganic\s+carbon|alkalinity|pCO2|fCO2|'
+    r'sea\s+ice\s+(?:extent|concentration|thickness)|'
+    r'temperature\s+(?:record|anomaly|trend)|'
+    r'instrumental\s+record|paleoclimate|proxy\s+(?:data|record)|'
+    r'HadGEM|GISS|CESM|MPI-ESM|IPSL|MIROCe|ACCESS|CanESM|NorESM|GFDL'
     r')\b',
     re.IGNORECASE
 )
@@ -580,18 +722,16 @@ def _call_ollama(model: str, chunk: str) -> tuple[list[dict], dict]:
         "stream": False,
         "options": {"temperature": 0},
     }
-    resp = requests.post(_OLLAMA_URL, json=payload, timeout=120)
+    resp = requests.post(_OLLAMA_URL, json=payload, timeout=240)
     resp.raise_for_status()
     body = resp.json()
     content = body["message"]["content"].strip()
-    content = re.sub(r'^```(?:json)?\s*', '', content)
-    content = re.sub(r'\s*```$', '', content)
     usage = {
         "input_tokens":  body.get("prompt_eval_count", 0),
         "output_tokens": body.get("eval_count", 0),
     }
     usage["total_tokens"] = usage["input_tokens"] + usage["output_tokens"]
-    return json.loads(content), usage
+    return _extract_json_array(content), usage
 
 
 def _call_azure_openai(chunk: str) -> tuple[list[dict], dict]:
@@ -612,15 +752,13 @@ def _call_azure_openai(chunk: str) -> tuple[list[dict], dict]:
         max_tokens=2048,
     )
     content = response.choices[0].message.content.strip()
-    content = re.sub(r'^```(?:json)?\s*', '', content)
-    content = re.sub(r'\s*```$', '', content)
     u = response.usage
     usage = {
         "input_tokens":  u.prompt_tokens if u else 0,
         "output_tokens": u.completion_tokens if u else 0,
         "total_tokens":  u.total_tokens if u else 0,
     }
-    return json.loads(content), usage
+    return _extract_json_array(content), usage
 
 
 def _call_openai(chunk: str, api_key: str) -> tuple[list[dict], dict]:
@@ -636,15 +774,13 @@ def _call_openai(chunk: str, api_key: str) -> tuple[list[dict], dict]:
         max_tokens=2048,
     )
     content = response.choices[0].message.content.strip()
-    content = re.sub(r'^```(?:json)?\s*', '', content)
-    content = re.sub(r'\s*```$', '', content)
     u = response.usage
     usage = {
         "input_tokens":  u.prompt_tokens if u else 0,
         "output_tokens": u.completion_tokens if u else 0,
         "total_tokens":  u.total_tokens if u else 0,
     }
-    return json.loads(content), usage
+    return _extract_json_array(content), usage
 
 
 def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
@@ -673,8 +809,11 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
             return []
 
     # Don't feed the reference list to the LLM — it causes mass over-extraction.
+    # Only apply the cut if the section marker is past 20% of the document to
+    # avoid a "Funding" line in the header/metadata block cutting the text too early.
     hard_end = _SECTION_END_RE.search(text)
-    llm_text = text[:hard_end.start()] if hard_end else text
+    _min_cut = max(20_000, len(text) // 5)
+    llm_text = text[:hard_end.start()] if (hard_end and hard_end.start() > _min_cut) else text
 
     all_chunks = _chunk_text(llm_text)
     chunks_with_idx = [(i, c) for i, c in enumerate(all_chunks) if _has_dataset_signals(c)]
@@ -709,8 +848,10 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
         try:
             items, usage = call_fn(chunk)
             for item in items:
+                if not isinstance(item, dict):
+                    continue
                 name = item.get("name", "").strip()
-                if not name or name.lower() in seen_names:
+                if not name or not _is_likely_dataset(name) or name.lower() in seen_names:
                     continue
                 seen_names.add(name.lower())
                 raw_primary = item.get("is_primary", False)
@@ -791,6 +932,9 @@ def extract_from_pdf(pdf_path: str, use_llm: bool = True,
         print(f"  ERROR: could not read text from {pdf_path}")
         return []
     print(f"  PDF size  : {len(text):,} chars")
+    if len(text) < 3000:
+        print(f"  WARNING: Very little text extracted ({len(text)} chars). "
+              f"This PDF may be scanned/image-based — dataset extraction will be limited.")
 
     t0 = time.time()
     regex_refs = extract_regex(text)
