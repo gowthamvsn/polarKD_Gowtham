@@ -950,7 +950,40 @@ def extract_from_pdf(pdf_path: str, use_llm: bool = True,
     print(f"  LLM   refs : {len(llm_refs):>4}")
     print(f"  Combined   : {len(total):>4}  raw refs  (before dedup)")
     print(f"  Wall time  : {time.time()-t0:.1f}s")
-    print(f"{'═' * W}\n")
+    print(f"{'═' * W}")
+
+    # ── Active / Secondary summary (mirrors the UI display) ─────────────────
+    if total:
+        primary = [r for r in total if r.is_primary]
+        secondary = [r for r in total if not r.is_primary]
+
+        heuristic_note = ""
+        if not primary and total:
+            # Same fallback the UI uses: pick the first LLM ref (no mention count here)
+            primary = [total[0]]
+            secondary = total[1:]
+            heuristic_note = "  (primary identified by position — LLM did not mark one)"
+
+        print(f"\n  Active Dataset(s)  [{len(primary)}]{heuristic_note}")
+        for r in primary:
+            src_tag = f"[{r.source}]"
+            hint = f"  {r.repository_hint}" if r.repository_hint else ""
+            url_part = f"  {r.url}" if r.url else (f"  doi:{r.doi}" if r.doi else "")
+            print(f"    ★  {r.name:<45} {src_tag:<7}{hint}{url_part}")
+
+        print(f"\n  Secondary References  [{len(secondary)}]")
+        if secondary:
+            for r in secondary:
+                src_tag = f"[{r.source}]"
+                hint = f"  {r.repository_hint}" if r.repository_hint else ""
+                url_part = f"  {r.url}" if r.url else (f"  doi:{r.doi}" if r.doi else "")
+                print(f"    ·  {r.name:<45} {src_tag:<7}{hint}{url_part}")
+        else:
+            print(f"    (none)")
+
+        print(f"{'═' * W}\n")
+    else:
+        print(f"  No datasets found.\n{'═' * W}\n")
 
     return total
 
