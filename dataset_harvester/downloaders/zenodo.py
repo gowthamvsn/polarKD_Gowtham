@@ -5,8 +5,10 @@ for a given record ID or record URL.
 Zenodo is fully open (no auth required for public records).
 """
 
+import gzip
 import os
 import re
+import shutil
 import requests
 
 from .generic import download_file
@@ -83,12 +85,30 @@ def download(url: str = None, doi: str = None,
     os.makedirs(dest_dir, exist_ok=True)
 
     MAX_MB = 200.0
-    CSV_EXTS = {".csv", ".tsv", ".txt", ".tab"}
+    TEXT_EXTS = {".csv", ".tsv", ".txt", ".tab"}
+
+    def _accept(filename: str) -> bool:
+        """Accept plain text files and gzipped text files."""
+        fl = filename.lower()
+        if fl.endswith(".gz"):
+            inner = os.path.splitext(fl[:-3])[1]  # e.g. ".csv" from "data.csv.gz"
+            return inner in TEXT_EXTS or fl.endswith(".tab.gz")
+        return os.path.splitext(fl)[1] in TEXT_EXTS
+
+    def _decompress_gz(gz_path: str) -> str:
+        """Decompress .gz → inner file, remove .gz original, return new path."""
+        out_path = gz_path[:-3]  # strip ".gz"
+        with gzip.open(gz_path, "rb") as f_in, open(out_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.remove(gz_path)
+        print(f"     Decompressed → {os.path.basename(out_path)}")
+        return out_path
+
     local_paths = []
     for f in files:
-        ext = os.path.splitext(f["filename"].lower())[1]
-        if ext not in CSV_EXTS:
-            print(f"     [SKIP] {f['filename']} — not a CSV/text file (skipping {ext})")
+        if not _accept(f["filename"]):
+            ext = os.path.splitext(f["filename"].lower())[1]
+            print(f"     [SKIP] {f['filename']} — not a text/CSV file (ext={ext})")
             continue
         size_mb = f["size"] / 1024 / 1024 if f["size"] else 0
         if size_mb > MAX_MB:
@@ -96,8 +116,13 @@ def download(url: str = None, doi: str = None,
             continue
         print(f"     Downloading: {f['filename']}  ({size_mb:.1f} MB)")
         path = download_file(f["url"], dest_dir, f["filename"])
+        if path.endswith(".gz"):
+            try:
+                path = _decompress_gz(path)
+            except Exception as e:
+                print(f"     [WARN] gzip decompression failed: {e}")
         local_paths.append(path)
 
     if not local_paths:
-        raise RuntimeError(f"All files exceeded {MAX_MB} MB size limit")
+        raise RuntimeError(f"No downloadable text/CSV files found (all skipped or too large)")
     return local_paths

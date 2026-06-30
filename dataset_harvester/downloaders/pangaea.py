@@ -6,8 +6,10 @@ Data is usually a tab-separated .txt file downloadable directly via:
   https://doi.pangaea.de/10.1594/PANGAEA.XXXXXX?format=textfile
 """
 
+import gzip
 import os
 import re
+import shutil
 import zipfile
 import requests
 
@@ -72,10 +74,12 @@ def download(url: str = None, doi: str = None, accession: str = None,
     print(f"     Downloading: {filename}")
     path = download_file(download_url, dest_dir, filename)
 
-    # PANGAEA returns application/zip even for ?format=textfile — extract if so
+    # PANGAEA response may be ZIP or gzip — detect by magic bytes
     with open(path, "rb") as _f:
         magic = _f.read(2)
+
     if magic == b"PK":
+        # ZIP archive
         zip_path = path[:-4] + ".zip" if path.endswith(".txt") else path + ".zip"
         os.rename(path, zip_path)
         extracted = []
@@ -86,5 +90,14 @@ def download(url: str = None, doi: str = None, accession: str = None,
         os.remove(zip_path)
         print(f"     Extracted {len(extracted)} file(s) from ZIP")
         return extracted
+
+    if magic == b"\x1f\x8b":
+        # gzip archive
+        out_path = path[:-3] if path.endswith(".gz") else path + ".decompressed.txt"
+        with gzip.open(path, "rb") as f_in, open(out_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.remove(path)
+        print(f"     Decompressed gzip → {os.path.basename(out_path)}")
+        return [out_path]
 
     return [path]

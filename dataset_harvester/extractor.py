@@ -72,16 +72,16 @@ _CDS_RE = re.compile(r'cds\.climate\.copernicus\.eu[^\s\)\],\'"<>]*', re.IGNOREC
 _KNOWN_DATASETS = [
     "ERA5", "ERA-Interim", "ERA-40",
     "MODIS", "VIIRS", "Landsat",
-    "Sentinel-1", "Sentinel-2", "Sentinel-3", "Sentinel-5P",
+    "Sentinel-1", "Sentinel-2", "Sentinel-3", "Sentinel-5P", "Sentinel-6",
     "AMSR-E", "AMSR2", "SSMIS", "SSM/I",
     "ICESat", "ICESat-2", "CryoSat-2",
     "GRACE", "GRACE-FO",
     "PIOMAS", "TOPAZ", "TOPAZ4",
     "NCEP", "NCEP/NCAR", "CFSR", "CFSv2",
-    "JRA-55", "MERRA-2",
+    "JRA-55", "MERRA-2", "MERRA",
     "AVHRR", "GOES",
     "NSIDC Sea Ice Index",
-    "HadGHCND", "HadSST", "HadCRUT",
+    "HadGHCND", "HadSST", "HadCRUT", "HadISST",
     "GISTEMP", "Berkeley Earth",
     "ETOPO", "GEBCO",
     "WOA", "World Ocean Atlas",
@@ -96,15 +96,39 @@ _KNOWN_DATASETS = [
     "HYCOM", "FESOM", "NEMO", "ROMS",
     "WRF",
     # Ocean reanalysis / products
-    "GLORYS", "GLORYS12", "OSTIA",
+    "GLORYS", "GLORYS12", "OSTIA", "ORAS5", "ECCO", "EN4",
     # Sea-ice satellite products
-    "OSI-SAF", "SMOS",
+    "OSI-SAF", "SMOS", "GlobSnow",
     # Precipitation datasets
-    "GPM", "IMERG", "GPCP", "TRMM", "CMORPH", "PERSIANN",
+    "GPM", "IMERG", "GPCP", "TRMM", "CMORPH", "PERSIANN", "PERSIANN-CDR",
+    "MSWEP", "GPCC",
     # Atmospheric / climate
-    "CALIPSO", "CloudSat", "CAMSRA",
+    "CALIPSO", "CloudSat", "CAMSRA", "TROPOMI", "AERONET",
     # Climate model families
-    "AWI-CM", "MPI-ESM", "CESM", "CESM2",
+    "AWI-CM", "MPI-ESM", "CESM", "CESM2", "E3SM",
+    # Terrain / elevation datasets
+    "ArcticDEM", "REMA", "SRTM", "TanDEM-X", "ASTER GDEM",
+    # Snow / permafrost observation networks
+    "SNOTEL", "GTN-P",
+    # Flux tower networks
+    "FLUXNET", "FLUXNET2015", "AmeriFlux", "ICOS",
+    # Ocean biogeochemistry observation systems
+    "SOCAT", "GLODAP", "ICOADS", "PSMSL",
+    # Climate observation datasets
+    "GHCND", "GHCNM", "GHCN-D", "GHCN-M",
+    "CRU TS", "CHELSA", "DAYMET", "WorldClim",
+    # Modern satellite missions
+    "SMAP", "SWOT", "GEDI",
+    # Radiosonde / upper-air
+    "IGRA",
+    # Sea surface temperature reconstructions
+    "ERSST", "ICOADS",
+    # Ocean altimetry satellites
+    "Jason-1", "Jason-2", "Jason-3", "TOPEX/Poseidon",
+    # World Ocean Database
+    "WOD", "World Ocean Database",
+    # NCAR Research Data Archive
+    "NCAR-RDA",
 ]
 
 _KNOWN_PATTERN = re.compile(
@@ -142,6 +166,25 @@ _JOURNAL_DOI_PREFIXES = {
     "10.1163",  # Brill journals
     "10.4319",  # Limnology and Oceanography
     "10.1899",  # Journal of the North American Benthological Society
+    # Additional journal prefixes found to slip through
+    "10.2136",  # ASA/CSSA/SSSA journals (Vadose Zone Journal, etc.)
+    "10.21105", # Journal of Open Source Software (JOSS)
+    "10.1641",  # BioScience (AIBS)
+    "10.1023",  # Springer/Kluwer legacy prefix
+    "10.1046",  # Blackwell Publishing legacy
+    "10.1101",  # bioRxiv / medRxiv preprints
+    "10.2478",  # Sciendo / De Gruyter journals
+    "10.4141",  # Canadian Journal of Soil/Plant Science (NRC)
+    "10.2166",  # IWA Publishing (water/hydrology journals)
+    "10.1002",  # Wiley — broad Wiley journals
+    "10.2307",  # JSTOR
+    "10.7717",  # PeerJ
+    "10.7150",  # Ivyspring (Theranostics, etc.)
+    "10.3390",  # MDPI journals
+    "10.9753",  # ICCE (International Conference on Coastal Engineering)
+    "10.1061",  # ASCE (American Society of Civil Engineers)
+    "10.2151",  # Journal of the Meteorological Society of Japan
+    "10.12952", # Elementa: Science of the Anthropocene (pre-AGU prefix)
 }
 
 # DOI prefixes that are definitely data repositories — always keep these
@@ -151,7 +194,7 @@ _DATA_REPO_DOI_PREFIXES = {
     "10.7289",  # NOAA NCEI
     "10.5067",  # NASA EOSDIS / NSIDC
     "10.18739", # Arctic Data Center
-    "10.6073",  # BCO-DMO
+    "10.6073",  # BCO-DMO (Biological and Chemical Oceanography Data Management)
     "10.6084",  # Figshare
     "10.5061",  # Dryad
     "10.26050", # SEANOE
@@ -168,6 +211,32 @@ _DATA_REPO_DOI_PREFIXES = {
     "10.25923", # NOAA NCEI (alternate prefix)
     "10.22008", # GEUS / Arctic Greenland data portals
     "10.7265",  # NSIDC (alternate dataset DOI prefix)
+    # Expanded data repository coverage
+    "10.5065",  # NCAR/UCAR Research Data Archive (rda.ucar.edu)
+    "10.17190", # AmeriFlux network flux tower data
+    "10.17632", # Mendeley Data
+    "10.7910",  # Harvard Dataverse
+    "10.17605", # OSF (Open Science Framework)
+    "10.22033", # EarthChem / IEDA (Interdisciplinary Earth Data Alliance)
+    "10.15468", # GBIF (Global Biodiversity Information Facility)
+    "10.17026", # DANS/EASY (Netherlands)
+    "10.5255",  # UK Data Service (UKDS)
+    "10.5256",  # CEDA / BADC (Centre for Environmental Data Analysis, UK)
+    "10.11578", # DOE Office of Scientific & Technical Information (OSTI)
+    "10.18160", # ICOS (Integrated Carbon Observation System)
+    "10.34770", # Princeton DataSpace
+    "10.25914", # TERN (Terrestrial Ecosystem Research Network, Australia)
+    "10.26022", # IMOS (Integrated Marine Observing System, Australia)
+    "10.21420", # SND (Swedish National Data Service)
+    "10.7488",  # Edinburgh DataShare (University of Edinburgh)
+    "10.6075",  # KNB Data Repository (Knowledge Network for Biocomplexity)
+    "10.15485", # EUDAT B2SHARE
+    "10.21233", # LifeWatch ERIC
+    "10.20350", # IEO (Instituto Español de Oceanografía)
+    "10.12770", # SeaDataNet (pan-European marine data)
+    "10.25504", # IGSN (International Geo Sample Number registry)
+    "10.26181", # Monash University Research Repository
+    "10.48350", # University of Edinburgh Research Data Repository
 }
 
 # LLM false-positive filter: terms that indicate the name is NOT a dataset
@@ -197,6 +266,11 @@ _FIGURE_TABLE_RE = re.compile(
 # Reject author citation patterns: "Mann et al., 2012" / "Bradlow et al. (2002)"
 _CITATION_RE = re.compile(r'\bet\s+al\.?\b', re.IGNORECASE)
 
+# Reject bibliographic citation format: "Journal Name, 18, 1215–1239, 2024"
+_JOURNAL_CITATION_RE = re.compile(
+    r'\b\d{1,4}\s*,\s*\d{1,6}\s*[–\-]\s*\d{1,6}\s*,\s*(?:19|20)\d{2}\b'
+)
+
 # Reject funding acknowledgement strings
 _FUNDING_RE = re.compile(
     r'\b(?:NWO|NSF|NSERC|NIH|ERC|DFG|NERC|ARC\b|venigrant|grant\s+#|award\s+#|'
@@ -225,6 +299,8 @@ def _is_likely_dataset(name: str) -> bool:
         return False
     if _CITATION_RE.search(n):
         return False
+    if _JOURNAL_CITATION_RE.search(n):
+        return False
     if _FUNDING_RE.search(n):
         return False
     # Reject suspiciously long names (> 250 chars) — usually multi-grant strings
@@ -242,6 +318,30 @@ _JOURNAL_URL_DOMAINS = {
     "newengineer.com", "gsas.harvard.edu", "un.org", "usembassy.gov",
     "wwf.org", "wwf.org.uk", "environment.nsw.gov.au",
     "greatwhitecon.info",
+    # Additional journal/publisher domains
+    "agupubs.onlinelibrary.wiley.com",  # AGU journals on Wiley platform
+    "journals.agu.org",                  # AGU legacy journal site
+    "royalsocietypublishing.org",        # Royal Society journals
+    "rmets.onlinelibrary.wiley.com",     # Royal Meteorological Society
+    "link.springer.com",                 # Springer journal articles
+    "academic.oup.com",                  # Oxford University Press journals
+    "iopscience.iop.org",                # IOP Publishing
+    "mdpi.com",                          # MDPI open-access journals
+    "frontiersin.org",                   # Frontiers journals
+    "pubs.acs.org",                      # American Chemical Society
+    "pubs.rsc.org",                      # Royal Society of Chemistry
+    "ascelibrary.org",                   # ASCE journals
+    "esajournals.onlinelibrary.wiley.com", # ESA journals (Ecology, etc.)
+    "brill.com",                         # Brill academic journals
+    "degruyter.com",                     # De Gruyter / Sciendo journals
+    "joss.theoj.org",                    # Journal of Open Source Software
+    "journals.plos.org",                 # PLOS journals
+    "elifesciences.org",                 # eLife journal
+    "bioone.org",                        # BioOne journals
+    "ingentaconnect.com",                # Ingenta aggregator
+    "jstor.org",                         # JSTOR journal archive
+    "annals.org",                        # Annals of Internal Medicine
+    "bmj.com",                           # British Medical Journal
 }
 
 
@@ -254,6 +354,9 @@ def _is_data_doi(doi: str) -> bool:
 
 def _is_journal_url(url: str) -> bool:
     try:
+        # Malformed URL: two protocols merged (e.g. "https://doi.org/10.5281/https://doi.org/...")
+        if url.count("://") > 1:
+            return True
         domain = url.split("//", 1)[1].split("/")[0].lower()
         domain = domain.lstrip("www.")
         if domain in _JOURNAL_URL_DOMAINS:
@@ -289,8 +392,8 @@ def _repo_hint_from_url(url: str) -> Optional[str]:
     if "arcticdata.io" in u:         return "arctic_data_center"
     if "cds.climate" in u or ("copernicus" in u and "marine" not in u):
                                      return "copernicus_cds"
-    if "marine.copernicus" in u:     return "cmems"
-    if "ncei.noaa" in u:             return "noaa_ncei"
+    if "marine.copernicus" in u or "copernicusmarine" in u: return "cmems"
+    if "ncei.noaa" in u or "ncdc.noaa" in u: return "noaa_ncei"
     if "earthdata.nasa.gov" in u:    return "nasa_earthdata"
     if "nsidc" in u:                 return "nsidc"
     if "noaa.gov" in u:              return "noaa"
@@ -302,12 +405,59 @@ def _repo_hint_from_url(url: str) -> Optional[str]:
     if "seanoe.org" in u:            return "seanoe"
     if "data.mendeley.com" in u:     return "mendeley"
     if "bodc.ac.uk" in u:            return "bodc"
-    if "ornl.gov" in u:              return "ornl_daac"
+    if "ornl.gov" in u or "daac.ornl" in u: return "ornl_daac"
     if "usgs.gov" in u and "data" in u: return "usgs"
-    if "ncdc.noaa" in u:             return "noaa_ncei"
     if "gfz-potsdam.de" in u:        return "gfz"
     if "polardata.ca" in u:          return "polar_data_catalogue"
     if "ogsl.ca" in u or "slgo.ca" in u: return "ogsl"
+    # Flux tower networks
+    if "ameriflux.lbl.gov" in u:     return "ameriflux"
+    if "fluxnet" in u or "fluxdata.org" in u: return "fluxnet"
+    if "icos-cp.eu" in u or "icos-ri.eu" in u: return "icos"
+    # Atmospheric / met data
+    if "arm.gov" in u:               return "arm"
+    if "rda.ucar.edu" in u or "ncar.ucar.edu" in u: return "ncar_rda"
+    if "toolik.alaska.edu" in u:     return "toolik_field_station"
+    if "aeronet.gsfc.nasa.gov" in u: return "nasa_earthdata"
+    # Ocean biogeochemistry
+    if "socat.info" in u:            return "socat"
+    if "glodap.info" in u:           return "glodap"
+    if "bco-dmo.org" in u:           return "bco_dmo"
+    if "seadatanet.org" in u:        return "seadatanet"
+    if "emodnet.eu" in u:            return "emodnet"
+    # Sea level / ocean monitoring
+    if "psmsl.org" in u:             return "psmsl"
+    if "aviso.altimetry.fr" in u:    return "aviso"
+    if "marine.copernicus.eu" in u:  return "cmems"
+    # Biodiversity
+    if "gbif.org" in u:              return "gbif"
+    if "obis.org" in u:              return "obis"
+    # UK environmental data
+    if "ceda.ac.uk" in u:            return "ceda"
+    if "ceh.ac.uk" in u:             return "eidc"
+    if "bas.ac.uk" in u:             return "bas"
+    if "data.nerc.ac.uk" in u:       return "nerc"
+    # Polar data centres
+    if "data.aad.gov.au" in u:       return "aadc"
+    if "tern.org.au" in u:           return "tern"
+    if "imos.org.au" in u:           return "imos"
+    # NASA portals
+    if "podaac" in u:                return "nasa_earthdata"
+    if "disc.gsfc.nasa.gov" in u or "gesdisc" in u: return "nasa_earthdata"
+    if "lpdaac.usgs.gov" in u:       return "nasa_earthdata"
+    if "search.earthdata.nasa.gov" in u: return "nasa_earthdata"
+    if "oceancolor.gsfc.nasa.gov" in u: return "nasa_earthdata"
+    # ESGF (CMIP / model output)
+    if "esgf" in u:                  return "esgf"
+    # Hydrology
+    if "hydroshare.org" in u:        return "hydroshare"
+    # Nordic / European met offices
+    if "thredds.met.no" in u or "api.met.no" in u: return "met_norway"
+    if "opendata.dwd.de" in u:       return "dwd"
+    if "smhi.se" in u:               return "smhi"
+    # Data registries
+    if "registry.opendata.aws" in u: return "aws_open_data"
+    if "portal.edirepository.org" in u or "lternet.edu" in u: return "edi_lter"
     # doi.org resolver: check if the embedded DOI belongs to a known data prefix
     if "doi.org" in u:
         m = re.search(r'doi\.org/(10\.\d{4,9})', u)
@@ -316,7 +466,16 @@ def _repo_hint_from_url(url: str) -> Optional[str]:
             if prefix in ("10.1594", "10.5441"): return "pangaea"
             if prefix == "10.5281":              return "zenodo"
             if prefix == "10.18739":             return "arctic_data_center"
-            if prefix in ("10.5067",):           return "nasa_earthdata"
+            if prefix in ("10.5067", "10.7265"): return "nasa_earthdata"
+            if prefix == "10.5065":              return "ncar_rda"
+            if prefix == "10.17190":             return "ameriflux"
+            if prefix == "10.17632":             return "mendeley"
+            if prefix == "10.7910":              return "harvard_dataverse"
+            if prefix == "10.22033":             return "earthchem"
+            if prefix == "10.18160":             return "icos"
+            if prefix == "10.6073":              return "bco_dmo"
+            if prefix == "10.3334":              return "ornl_daac"
+            if prefix == "10.7289":              return "noaa_ncei"
             if prefix in _DATA_REPO_DOI_PREFIXES: return "data_repository"
     return None
 
@@ -448,16 +607,23 @@ def extract_regex(text: str) -> list[DatasetRef]:
         _c["url_kept"] += 1
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
         use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        # Normalize doi.org URLs to bare DOI so they dedup with the DOI pass below
+        _doi_in_url = re.search(r'doi\.org/(10\.\d{4,9}/[^\s\)\(\],\'"<>]+)', url, re.IGNORECASE)
+        dedup_key = _doi_in_url.group(1).lower() if _doi_in_url else url
         _add(DatasetRef(
             name=url, url=url, repository_hint=hint,
             raw_citation=ctx, source="regex", used_in_study=use_in_study
-        ), url)
+        ), dedup_key)
 
     # DOIs — only data DOIs
     for m in _DOI_RE.finditer(text):
         raw_doi = m.group(1).rstrip(".,;:")
         doi = re.sub(r'^https?://doi\.org/', '', raw_doi, flags=re.IGNORECASE)
         _c["doi_raw"] += 1
+        # Reject malformed DOIs that swallowed an adjacent URL (e.g. 10.5281/https://doi.org/...)
+        if "http" in doi or "://" in doi:
+            _c["doi_journal"] += 1
+            continue
         if _is_truncated(doi):
             _c["doi_truncated"] += 1
             continue
@@ -480,13 +646,15 @@ def extract_regex(text: str) -> list[DatasetRef]:
     # PANGAEA accessions
     for m in _PANGAEA_RE.finditer(text):
         _c["pangaea"] += 1
-        acc = f"PANGAEA.{m.group(1)}"
+        num = m.group(1)
+        acc = f"PANGAEA.{num}"
         ctx = text[max(0, m.start()-80):m.end()+80].replace("\n", " ")
         use_in_study = _has_use_context(text, m.start(), m.end(), data_ranges)
+        # Use canonical DOI key so this deduplicates with the URL/DOI pass
         _add(DatasetRef(
             name=acc, accession=acc, repository_hint="pangaea",
             raw_citation=ctx, source="regex", used_in_study=use_in_study
-        ), acc)
+        ), f"10.1594/pangaea.{num}")
 
     # Zenodo records
     for m in _ZENODO_RE.finditer(text):
@@ -550,16 +718,42 @@ def _hint_for_known(name: str) -> Optional[str]:
     if n.startswith("ERA") or n in {"CAMSRA"}:
         return "copernicus_cds"
     if n in {"MODIS", "VIIRS", "LANDSAT", "ICESAT", "ICESAT-2", "GRACE", "GRACE-FO",
-             "MERRA-2", "CALIPSO", "CLOUDSAT", "GPM", "IMERG", "TRMM", "SMOS"}:
+             "MERRA-2", "MERRA", "CALIPSO", "CLOUDSAT", "GPM", "IMERG", "TRMM", "SMOS",
+             "SMAP", "SWOT", "GEDI", "AERONET", "ARCTICDEM", "REMA", "SRTM",
+             "JASON-1", "JASON-2", "JASON-3", "TOPEX/POSEIDON",
+             "ECCO", "DAYMET"}:
         return "nasa_earthdata"
     if n in {"AMSR-E", "AMSR2", "SSMIS", "SSM/I", "NSIDC SEA ICE INDEX", "IABP"}:
         return "nsidc"
-    if n in {"NCEP", "NCEP/NCAR", "CFSR", "CFSV2", "GPCP", "CMORPH", "PERSIANN"}:
+    if n in {"NCEP", "NCEP/NCAR", "CFSR", "CFSV2", "GPCP", "CMORPH", "PERSIANN",
+             "PERSIANN-CDR", "MSWEP", "GPCC", "GHCND", "GHCNM", "GHCN-D", "GHCN-M",
+             "ERSST", "ICOADS", "PSMSL", "IGRA", "WOD", "WORLD OCEAN DATABASE"}:
         return "noaa"
-    if n in {"GLORYS", "GLORYS12", "OSTIA", "OSI-SAF"}:
+    if n in {"GLORYS", "GLORYS12", "OSTIA", "OSI-SAF", "ORAS5"}:
         return "cmems"
     if n in {"CMIP3", "CMIP5", "CMIP6"}:
+        return "esgf"
+    if n in {"FLUXNET", "FLUXNET2015"}:
+        return "fluxnet"
+    if n in {"AMERIFLUX"}:
+        return "ameriflux"
+    if n in {"ICOS"}:
+        return "icos"
+    if n in {"SOCAT", "GLODAP", "EN4", "HADISST", "HADCRUT", "HADSST",
+             "CHELSA", "WORLDCLIM", "CRU TS", "E3SM"}:
         return "other"
+    if n in {"SNOTEL"}:
+        return "noaa"
+    if n in {"GTN-P"}:
+        return "other"
+    if n in {"TANDEM-X", "ASTER GDEM"}:
+        return "other"
+    if n in {"GLOBSNOW"}:
+        return "other"
+    if n in {"NCAR-RDA"}:
+        return "ncar_rda"
+    if n in {"TROPOMI", "SENTINEL-1", "SENTINEL-2", "SENTINEL-3", "SENTINEL-5P", "SENTINEL-6"}:
+        return "copernicus_cds"
     return None
 
 
@@ -652,15 +846,23 @@ _DATASET_SIGNAL_RE = re.compile(
     r'|ERA5|ERA-Interim|ERA-40|MODIS|VIIRS|CryoSat|Sentinel|ICESat|GRACE|'
     r'MERRA|CMIP|TOPAZ|PIOMAS|AMSR|HYCOM|FESOM|GLORYS|OSTIA|GPM|IMERG|'
     r'CALIPSO|NCEP|JRA-55|CFSR|GISTEMP|HadCRUT|AVHRR|ARGO|MOSAiC|SHEBA|'
+    r'SMAP|SWOT|GEDI|TROPOMI|AERONET|ArcticDEM|REMA|SRTM|TanDEM|'
+    r'FLUXNET|AmeriFlux|ICOS|SOCAT|GLODAP|SNOTEL|GTN-P|'
+    r'GHCN|GPCC|CRU\s+TS|CHELSA|DAYMET|WorldClim|'
+    r'ORAS5|ECCO|HadISST|ERSST|ICOADS|PSMSL|IGRA|'
+    r'Jason-[123]|GlobSnow|E3SM|NCAR-RDA|'
     # General data/observation terms
     r'reanalysis|remote\s+sensing|satellite\s+data|in\s+situ|buoy|CTD|'
     r'mooring|observat(?:ion|ory)|field\s+campaign|field\s+station|'
-    # Field measurement / sample collection — catches permafrost/lab papers
+    r'flux\s+tower|eddy\s+covariance|radiocarbon|dendrochronolog|'
+    r'GPS\s+(?:survey|data|measurement)|raised\s+beach|isolation\s+basin|'
+    r'isostatic|cosmogenic|diatom\s+(?:analysis|assemblage|record)|'
+    # Field measurement / sample collection
     r'samples?\s+(?:were\s+)?collect|water\s+samples?|soil\s+samples?|'
     r'collected\s+from|sampl(?:ed|ing)\s+(?:at|in|from)|'
     r'incubat(?:ed|ion)|dissolved\s+organic|stream(?:water)?|'
     r'permafrost|tundra|peatland|wetland|watershed|catchment|'
-    r'flux\s+(?:tower|data|measurements?)|eddy\s+covariance|'
+    r'flux\s+(?:tower|data|measurements?)|'
     r'ice\s+core|sediment\s+core|water\s+column|depth\s+profile|'
     r'monitoring\s+(?:station|network|program|data)|long.term\s+(?:data|monitoring)|'
     # Climate modeling / ocean science papers
@@ -783,7 +985,8 @@ def _call_openai(chunk: str, api_key: str) -> tuple[list[dict], dict]:
     return _extract_json_array(content), usage
 
 
-def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
+def extract_llm(text: str, api_key: Optional[str] = None,
+                existing_refs: Optional[list] = None) -> list[DatasetRef]:
     # Priority: Azure OpenAI → regular OpenAI → Ollama (local fallback)
     azure_ready = bool(os.getenv("AZURE_OPENAI_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"))
     openai_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -832,7 +1035,21 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
     print(f"  {'─' * (W-2)}")
 
     refs: list[DatasetRef] = []
-    seen_names: set[str] = set()
+    # Seed seen_names with regex-pass refs so LLM doesn't re-extract them
+    seen_names: set[str] = set(r.name.lower() for r in (existing_refs or []))
+    # Track lowercased accepted names for prefix-based dedup
+    # Rule: if accepted "era5" exists, skip "era5 reanalysis product" (starts with "era5 ")
+    #       Note: "era5 " (with space) prevents "era5" from matching "era5-land"
+    seen_prefixes: list[str] = [r.name.lower() for r in (existing_refs or [])]
+    # Track first tokens of multi-word names where the first token is an acronym/proper noun
+    # e.g. "PAMARCMiP aircraft campaign data" → first_tok = "pamarcmip"
+    # Any later "PAMARCMiP campaign data", "PAMARCMiP observations" → skip
+    _ACRONYM_RE = re.compile(r'^[A-Z][A-Za-z0-9\-]{3,}$')
+    seen_first_toks: set[str] = set()
+    for r in (existing_refs or []):
+        toks = r.name.split()
+        if len(toks) > 1 and _ACRONYM_RE.match(toks[0]):
+            seen_first_toks.add(toks[0].lower())
 
     total_input_tok = 0
     total_output_tok = 0
@@ -851,18 +1068,45 @@ def extract_llm(text: str, api_key: Optional[str] = None) -> list[DatasetRef]:
                 if not isinstance(item, dict):
                     continue
                 name = item.get("name", "").strip()
-                if not name or not _is_likely_dataset(name) or name.lower() in seen_names:
+                if not name or not _is_likely_dataset(name):
                     continue
-                seen_names.add(name.lower())
+                name_lower = name.lower()
+                if name_lower in seen_names:
+                    continue
+                # Prefix dedup: "ERA5 reanalysis product" → skip if "era5" already seen;
+                # "ERA5" → skip if "era5 reanalysis product" already seen.
+                # Use " " boundary so "era5" doesn't match "era5-land".
+                if any(
+                    name_lower.startswith(p + " ") or p.startswith(name_lower + " ")
+                    for p in seen_prefixes
+                ):
+                    continue
+                # First-token dedup: "PAMARCMiP campaign data" → skip if "pamarcmip" seen
+                # from a previous multi-word name with that first token
+                name_toks = name.split()
+                first_tok_lower = name_toks[0].lower() if name_toks else ""
+                if (len(name_toks) > 1
+                        and _ACRONYM_RE.match(name_toks[0])
+                        and first_tok_lower in seen_first_toks):
+                    continue
+                seen_names.add(name_lower)
+                seen_prefixes.append(name_lower)
+                if len(name_toks) > 1 and _ACRONYM_RE.match(name_toks[0]):
+                    seen_first_toks.add(first_tok_lower)
                 raw_primary = item.get("is_primary", False)
                 is_primary = (
                     raw_primary is True
                     or (isinstance(raw_primary, str) and raw_primary.lower() == "true")
                 )
+                # Strip journal URLs/DOIs that the LLM picked up from the paper itself
+                url_raw = item.get("url") or ""
+                url = url_raw if url_raw and not _is_journal_url(url_raw) else None
+                doi_raw = item.get("doi") or ""
+                doi = doi_raw if doi_raw and _is_data_doi(doi_raw) else None
                 refs.append(DatasetRef(
                     name=name,
-                    url=item.get("url"),
-                    doi=item.get("doi"),
+                    url=url,
+                    doi=doi,
                     accession=item.get("accession"),
                     repository_hint=item.get("repository_hint"),
                     raw_citation=item.get("raw_citation", "")[:300],
@@ -941,7 +1185,7 @@ def extract_from_pdf(pdf_path: str, use_llm: bool = True,
 
     llm_refs = []
     if use_llm:
-        llm_refs = extract_llm(text, api_key=api_key)
+        llm_refs = extract_llm(text, api_key=api_key, existing_refs=regex_refs)
 
     total = regex_refs + llm_refs
     print(f"\n{'═' * W}")
@@ -959,10 +1203,66 @@ def extract_from_pdf(pdf_path: str, use_llm: bool = True,
 
         heuristic_note = ""
         if not primary and total:
-            # Same fallback the UI uses: pick the first LLM ref (no mention count here)
-            primary = [total[0]]
-            secondary = total[1:]
-            heuristic_note = "  (primary identified by position — LLM did not mark one)"
+            # LLM found no primary — apply preference logic: specific repos > portals > position
+            # Preference: paper-output repos first, forcing/reanalysis portals last
+            _PREF_ORDER = [
+                ("pangaea", "zenodo", "figshare"),               # primary paper-output repos
+                ("arctic_data_center", "dryad", "seanoe"),       # other specific data repos
+                ("data_repository",),                            # generic doi (better than portals)
+                ("nasa_earthdata", "nsidc", "cmems", "copernicus_cds",
+                 "eumetsat", "noaa", "noaa_ncei", "ncar_rda"),   # forcing/reanalysis portals
+            ]
+            promoted = False
+            for hint_group in _PREF_ORDER:
+                for r in total:
+                    if (r.url or r.doi or r.accession) and r.repository_hint in hint_group:
+                        primary = [r]
+                        secondary = [x for x in total if x is not r]
+                        heuristic_note = f"  (promoted from refs — no LLM primary; best repo: {r.repository_hint})"
+                        promoted = True
+                        break
+                if promoted:
+                    break
+            if not promoted:
+                primary = [total[0]]
+                secondary = total[1:]
+                heuristic_note = "  (primary identified by position — LLM did not mark one)"
+        elif len(primary) > 2:
+            # Multiple chunks each marked a primary — prefer refs with real data URLs
+            has_url = [r for r in primary if r.url or r.doi or r.accession]
+            no_url  = [r for r in primary if not (r.url or r.doi or r.accession)]
+            kept = (has_url + no_url)[:2]
+            demoted = [r for r in primary if r not in kept]
+            for r in demoted:
+                r.is_primary = False
+            primary = kept
+            secondary = [r for r in total if not r.is_primary]
+            heuristic_note = f"  (capped at 2 — {len(demoted)} additional LLM primary mark(s) demoted)"
+
+        # If all LLM-marked primaries have no data link (journal DOI stripped, no URL/accession),
+        # promote the best regex-found data repository ref instead.
+        _REPO_PREF_ORDER = [
+            ("pangaea", "zenodo", "figshare"),
+            ("arctic_data_center", "dryad", "seanoe"),
+            ("data_repository",),
+            ("nasa_earthdata", "nsidc", "cmems", "copernicus_cds",
+             "eumetsat", "noaa", "noaa_ncei", "ncar_rda", "other"),
+        ]
+        if primary and not any(r.url or r.doi or r.accession for r in primary):
+            promoted = False
+            for hint_group in _REPO_PREF_ORDER:
+                for r in secondary:
+                    if (r.url or r.doi or r.accession) and r.repository_hint in hint_group:
+                        for p in primary:
+                            p.is_primary = False
+                        r.is_primary = True
+                        primary = [r]
+                        secondary = [x for x in secondary if x is not r]
+                        heuristic_note = "  (promoted from secondary — LLM primary had no data link after filtering)"
+                        promoted = True
+                        break
+                if promoted:
+                    break
 
         print(f"\n  Active Dataset(s)  [{len(primary)}]{heuristic_note}")
         for r in primary:

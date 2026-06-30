@@ -19,6 +19,7 @@ import io
 import json
 import pandas as pd
 import tempfile
+import gzip
 import requests
 import zipfile
 
@@ -26,6 +27,12 @@ import zipfile
 _harvester_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "dataset_harvester"))
 if _harvester_path not in sys.path:
     sys.path.insert(0, _harvester_path)
+try:
+    from tabulator import tabulate_papers as _tabulate_papers
+    _TABULATOR_AVAILABLE = True
+except Exception:
+    _TABULATOR_AVAILABLE = False
+
 try:
     from extractor import extract_from_pdfs
     from deduplicator import deduplicate
@@ -38,10 +45,16 @@ except Exception:
 try:
     from downloaders.pangaea import download as _pangaea_dl
     from downloaders.zenodo import download as _zenodo_dl
+    from downloaders.arctic_data_center import (
+        download as _adc_dl,
+        is_available as _adc_available,
+    )
     _DOWNLOADERS_AVAILABLE = True
 except Exception:
     _pangaea_dl = None
     _zenodo_dl = None
+    _adc_dl = None
+    _adc_available = None
     _DOWNLOADERS_AVAILABLE = False
 
 
@@ -49,12 +62,38 @@ _DOWNLOADS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", 
 
 # ── Downloadability checker ────────────────────────────────────────────────
 _AUTH_REQUIRED = {
+    # NASA / space agencies
     "nsidc", "nasa_earthdata", "copernicus_cds", "copernicus_marine",
-    "ecmwf", "esa", "jma", "ncar_rda",
+    "ecmwf", "esa", "jma",
+    # Reanalysis / model data archives
+    "ncar_rda", "esgf",
+    # Flux tower networks (registration required)
+    "ameriflux", "fluxnet", "icos",
+    # Oceanographic / marine (registration required)
+    "bodc", "seadatanet", "ceda", "nerc", "aviso",
+    # Polar / national
+    "polar_data_catalogue",
 }
 _LANDING_PAGE_ONLY = {
-    "uw_apl", "met_norway", "noaa", "noaa_ncei", "noaa_psl",
-    "usgs", "argo", "gebco", "other",
+    # US government portals
+    "uw_apl", "noaa", "noaa_ncei", "noaa_psl", "usgs",
+    # Oceanographic / climate observation
+    "argo", "gebco", "socat", "glodap", "psmsl", "bco_dmo",
+    "ornl_daac", "arm",
+    # Field station portals
+    "toolik_field_station", "met_norway", "dwd", "smhi",
+    # Biodiversity / ecological
+    "gbif", "obis", "edi_lter",
+    # Open-access data repos (require browser visit but no account)
+    "earthchem", "hydroshare",
+    "harvard_dataverse", "mendeley", "osf",
+    "emodnet", "seadatanet",
+    # Antarctic / polar national data centres
+    "bas", "aadc", "tern", "imos",
+    # Environmental data centres
+    "eidc", "aws_open_data",
+    # Generic fallback
+    "other",
 }
 _CSV_EXTS = {".csv", ".txt", ".tsv", ".tab"}
 
@@ -109,6 +148,17 @@ def check_downloadable(r):
                     return "no_csv", "No CSV files", "Zenodo record has no CSV/text files"
             except Exception:
                 return "unknown", "Unknown", "Could not reach Zenodo"
+    if (repo == "arctic_data_center"
+            or "arcticdata.io" in (r.resolved_url or "").lower()
+            or "10.18739" in (r.doi or "")):
+        if _adc_available:
+            try:
+                if _adc_available(url=r.resolved_url, doi=r.doi):
+                    return "yes", "Downloadable", "Arctic Data Center open dataset"
+                return "page", "Homepage only", "ADC package not found via DataONE API"
+            except Exception:
+                return "unknown", "Unknown", "Could not reach Arctic Data Center"
+        return "page", "Homepage only", "Arctic Data Center (open access — click link)"
     return "page", "Homepage only", "Landing page — no direct file"
 
 def _do_download(row: dict) -> list[str]:
@@ -126,6 +176,9 @@ def _do_download(row: dict) -> list[str]:
                            accession=accession or None, dest_root=_DOWNLOADS_ROOT)
     if (repo == "zenodo" or "zenodo" in url.lower() or "zenodo" in doi.lower()) and _zenodo_dl:
         return _zenodo_dl(url=url or None, doi=doi or None, dest_root=_DOWNLOADS_ROOT)
+    if (repo == "arctic_data_center" or "arcticdata.io" in url.lower()
+            or "10.18739" in doi.lower() or "10.18739" in url.lower()) and _adc_dl:
+        return _adc_dl(url=url or None, doi=doi or None, dest_root=_DOWNLOADS_ROOT)
     raise ValueError(f"No downloader available for repository '{repo}' — URL: {url}")
 
 
@@ -211,13 +264,26 @@ def _read_pangaea_lines(fpath: str) -> list[str]:
         return _f.readlines()
 
 
+def _open_possibly_gz(fpath: str):
+    """Return a text-mode file handle, transparently decompressing .gz files."""
+    if fpath.lower().endswith(".gz"):
+        return gzip.open(fpath, "rt", encoding="utf-8", errors="replace")
+    return open(fpath, encoding="utf-8", errors="replace")
+
+
 def _preview_file(fpath: str, n: int = 10) -> "pd.DataFrame | None":
-    """Return the first n rows of a downloaded dataset file as a DataFrame."""
-    ext = os.path.splitext(fpath)[1].lower()
+    """Return the first n rows of a downloaded dataset file as a DataFrame.
+    Transparently handles .gz compressed files."""
+    # Determine the 'effective' extension after stripping .gz
+    name = fpath.lower()
+    if name.endswith(".gz"):
+        name = name[:-3]
+    ext = os.path.splitext(name)[1]
     try:
         if ext in (".txt", ".tsv", ".tab"):
-            lines = _read_pangaea_lines(fpath)
-            # Skip the /* ... */ metadata header block
+            with _open_possibly_gz(fpath) as _f:
+                lines = _f.readlines()
+            # Skip the /* ... */ PANGAEA metadata header block
             start = 0
             in_header = False
             for idx, line in enumerate(lines):
@@ -233,9 +299,11 @@ def _preview_file(fpath: str, n: int = 10) -> "pd.DataFrame | None":
                 on_bad_lines="skip",
             )
         if ext == ".csv":
+            with _open_possibly_gz(fpath) as _f:
+                content = _f.read()
             return pd.read_csv(
-                fpath, nrows=n,
-                on_bad_lines="skip", encoding="utf-8", encoding_errors="replace",
+                io.StringIO(content), nrows=n,
+                on_bad_lines="skip",
             )
     except Exception:
         return None
@@ -1768,9 +1836,15 @@ elif uploaded_files and len(uploaded_files) > 0:
                             st.session_state[col_res_key] = []
 
                 elif p["_status_key"] == "auth":
-                    st.info(f"Requires account on {p['Repository']} — {p['Detail']}. Visit the link above to access.")
-                elif p["_status_key"] in ("page", "none"):
-                    st.info("No direct file available — use the link above to access the data manually.")
+                    st.info(f"**Login required** — {p['Repository']} requires a free account. Click the link above to register and download.")
+                elif p["_status_key"] == "page":
+                    url = p.get("URL", "")
+                    if url:
+                        st.info(f"**Open access** — no in-app download, but the data is publicly available. Click the link above to go to the data portal and download manually.")
+                    else:
+                        st.info("No URL available for this dataset.")
+                elif p["_status_key"] == "none":
+                    st.info("Dataset reference found in paper but no URL or DOI was identified.")
 
                 # Collection children list
                 if col_res_key in st.session_state:
@@ -1856,6 +1930,105 @@ else:
         '<div style="padding:1rem;background:#F0F4FA;border-radius:6px;color:#5F7A9D;font-size:0.85rem;">'
         'Upload PDFs above — dataset references will appear here automatically.</div>',
         unsafe_allow_html=True
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  SECTION 1c — VARIABLE TABULATION (Panoply-style)
+# ══════════════════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown('<div id="section-vartab"></div>', unsafe_allow_html=True)
+st.markdown('<span class="section-label">Paper Intelligence</span>', unsafe_allow_html=True)
+st.markdown('<div class="section-heading">Variables &amp; <em>Coverage</em></div>', unsafe_allow_html=True)
+
+if not _TABULATOR_AVAILABLE:
+    st.warning("Tabulator module not found — check `dataset_harvester/tabulator.py`.")
+elif uploaded_files and len(uploaded_files) > 0:
+    _tab_cache_key = "_".join(f"{f.name}:{f.size}" for f in uploaded_files)
+
+    if st.session_state.get("tabulator_cache_key") != _tab_cache_key:
+        st.session_state.tabulator_cache_key = _tab_cache_key
+        st.session_state.tabulator_results = None
+
+    if st.session_state.get("tabulator_results") is None:
+        with tempfile.TemporaryDirectory() as _tab_tmp:
+            _tab_paths = []
+            for f in uploaded_files:
+                f.seek(0)
+                _p = os.path.join(_tab_tmp, f.name)
+                with open(_p, "wb") as _out:
+                    _out.write(f.read())
+                _tab_paths.append(_p)
+
+            with st.spinner("Extracting variables and coverage…"):
+                st.session_state.tabulator_results = _tabulate_papers(_tab_paths)
+
+    _tab_results = st.session_state.tabulator_results or []
+
+    if _tab_results:
+        import pandas as pd
+
+        for _tr in _tab_results:
+            _paper_label = _tr["paper"]
+            _has_vars = bool(_tr.get("variables"))
+            _icon = "◎" if _has_vars else "○"
+
+            with st.expander(f"{_icon} {_paper_label}", expanded=False):
+                _c1, _c2, _c3 = st.columns(3)
+                with _c1:
+                    st.markdown('<span class="section-label">Study Area</span>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="polar-info-row">{_tr.get("location") or "Not detected"}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with _c2:
+                    st.markdown('<span class="section-label">Coordinates</span>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="polar-info-row">{_tr.get("coords") or "Not detected"}</div>',
+                        unsafe_allow_html=True,
+                    )
+                with _c3:
+                    st.markdown('<span class="section-label">Time Range</span>', unsafe_allow_html=True)
+                    _t_start = _tr.get("time_start")
+                    _t_end = _tr.get("time_end")
+                    _time_str = f"{_t_start} – {_t_end}" if _t_start else "Not detected"
+                    st.markdown(
+                        f'<div class="polar-info-row">{_time_str}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("<div style='margin-top:0.75rem;'></div>", unsafe_allow_html=True)
+                st.markdown('<span class="section-label">Measured Variables</span>', unsafe_allow_html=True)
+
+                if _has_vars:
+                    _rows = [
+                        {
+                            "Variable": v["name"],
+                            "Acronym": v["acronym"] or "—",
+                            "Unit": v["unit"],
+                            "Source": v.get("source", "—"),
+                        }
+                        for v in _tr["variables"]
+                    ]
+                    st.dataframe(
+                        pd.DataFrame(_rows),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Variable": st.column_config.TextColumn("Variable", width="large"),
+                            "Acronym": st.column_config.TextColumn("Acronym", width="small"),
+                            "Unit": st.column_config.TextColumn("Unit", width="small"),
+                            "Source": st.column_config.TextColumn("Source", width="small"),
+                        },
+                    )
+                else:
+                    _err = _tr.get("error", "No variables with recognised units found in this paper.")
+                    st.info(_err)
+else:
+    st.markdown(
+        '<div style="padding:1rem;background:#F0F4FA;border-radius:6px;color:#5F7A9D;font-size:0.85rem;">'
+        'Upload PDFs above — variable coverage will appear here automatically.</div>',
+        unsafe_allow_html=True,
     )
 
 
